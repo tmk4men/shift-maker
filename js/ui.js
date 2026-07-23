@@ -462,7 +462,7 @@
     var b = el('div', {}, [
       el('p', { class: 'hint', text: 'このURLを開くと、' + e.name + ' さんの希望提出画面だけが表示されます（管理用の設定は出ません）。' }),
       ta,
-      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ データはブラウザの中だけに保存されます。別の端末・別のブラウザで開くとデータは共有されません。別端末で入力してもらう場合は、提出画面の［提出コードをコピー］で受け取って、この画面の［提出コードを取り込む］に貼り付けてください。' })
+      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ データはこのブラウザにだけ保存されます。別の端末では共有されません。スタッフのスマホで入力してもらう場合は［スタッフ用の入力ページ］を使ってください。' })
     ]);
     modal('スタッフ用リンク', b, [
       el('button', {
@@ -768,7 +768,7 @@
     var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
     ta.value = code;
     var b = el('div', {}, [
-      el('p', { class: 'hint', text: 'このコードをコピーして、LINEやメールで責任者に送ってください。責任者は［希望・提出］タブの「提出コードを取り込む」から貼り付けます。' }),
+      el('p', { class: 'hint', text: 'このコードをコピーして、LINEなどで責任者に送ってください。責任者は［③ 希望を入れる］の［コードを貼り付けて取り込む］に貼り付けます。' }),
       ta
     ]);
     modal(e.name + ' さんの提出コード', b, [
