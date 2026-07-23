@@ -46,7 +46,8 @@ var Rules = (function () {
     { id: 'OPS-A02', cat: 'ops', name: '連勤の抑制', type: 'soft', weight: 150, params: {}, desc: '連勤が長くなるほど避ける。' },
     { id: 'OPS-A03', cat: 'ops', name: '教育ペアの優先', type: 'soft', weight: 800, params: {}, desc: '新人と担当トレーナーを同じ勤務に寄せる。' },
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者の温存', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
-    { id: 'OPS-A05', cat: 'ops', name: '月内のペース配分', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' }
+    { id: 'OPS-A05', cat: 'ops', name: '月内のペース配分', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' },
+    { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '本人ごとに週の上限時間を設ける。社会保険は2026年10月から「週20時間以上」が加入の分かれ目になるため、加入したくない人の調整に使う。' }
   ];
 
   var DEF_MAP = {};
@@ -282,6 +283,10 @@ var Rules = (function () {
       if (otAfter > otCap)
         ng('LAW-006', '時間外労働が月' + (otCap / 60) + '時間の上限を超えます（' + U.min2h(otAfter) + 'h）');
     }
+
+    // 本人ごとの週上限（社会保険の週20時間ラインの調整に使う）
+    if (on(data, 'OPS-A07') && e.weeklyHoursCap > 0 && wmin > e.weeklyHoursCap * 60)
+      ng('OPS-A07', '週の上限' + e.weeklyHoursCap + '時間を超えます（この週 ' + U.min2h(wmin) + 'h）');
 
     // 連勤（法定：週1休 → 最大6連勤）
     var run = runLength(ctx, empId, date);
@@ -522,6 +527,12 @@ var Rules = (function () {
         push('hard', 'OPS-035', e.name + 'さん：月間上限' + e.maxHoursMonth + '時間に対し' + U.min2h(s.minutes) + '時間', '', '', e.id);
       if (e.maxNights > 0 && s.nights > e.maxNights)
         push('hard', 'OPS-064', e.name + 'さん：月間夜勤上限' + e.maxNights + '回に対し' + s.nights + '回', '', '', e.id);
+      if (e.weeklyHoursCap > 0) {
+        Object.keys(s.week).forEach(function (wk) {
+          if (s.week[wk] > e.weeklyHoursCap * 60)
+            push('hard', 'OPS-A07', e.name + 'さん：' + wk + 'の週が' + U.min2h(s.week[wk]) + '時間（本人の週上限' + e.weeklyHoursCap + '時間を超過）', '', '', e.id);
+        });
+      }
       if (e.incomeCap > 0) {
         var tot = (e.ytdEarnings || 0) + s.pay;
         if (tot > e.incomeCap) push('hard', 'OPS-042', e.name + 'さん：年収上限' + U.yen(e.incomeCap) + 'を超過（' + U.yen(tot) + '）', '', '', e.id);

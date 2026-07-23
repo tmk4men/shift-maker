@@ -297,6 +297,41 @@ T('シナリオ6：年収の壁が近い人を超過させない');
 }
 
 /* =======================================================================
+   シナリオ6b：週20時間未満に抑える（2026年10月からの社会保険ライン）
+   ======================================================================= */
+T('シナリオ6b：社会保険に入りたくない人を週20時間未満に抑える');
+{
+  const d = baseData();
+  const e5 = d.employees.find(e => e.id === 'e5');
+  e5.weeklyHoursCap = 19;      // 週20時間以上で 社会保険の対象になるため19時間まで
+  e5.incomeCap = 0;
+  e5.minDays = 8; e5.maxDays = 20;
+  const { data, res } = run(d);
+  const errs = audit(data, res.assignments);
+  ok(errs.length === 0, 'ハード制約の違反なし', errs.slice(0, 5).join('\n       → '));
+
+  // 各週の労働時間を独立に数える
+  const ctx = Rules.buildContext(data, JSON.parse(JSON.stringify(res.assignments)));
+  const weeks = ctx.stats.e5.week;
+  const over = Object.keys(weeks).filter(w => weeks[w] > 19 * 60);
+  console.log('  伊藤の週別労働時間:', Object.keys(weeks).map(w => (weeks[w] / 60).toFixed(1) + 'h').join(' '));
+  ok(over.length === 0, 'どの週も19時間を超えない', over.map(w => w + '=' + (weeks[w] / 60).toFixed(1) + 'h').join(','));
+  ok(res.stats.e5.days > 0, '上限内でちゃんと勤務が入る');
+
+  // 手で超過させたら検出されるか
+  const a = JSON.parse(JSON.stringify(res.assignments));
+  const dates = U.monthDates(2026, 8).slice(0, 7);
+  dates.forEach(dt => {
+    if (!a[dt]) a[dt] = {};
+    Object.keys(a[dt]).forEach(k => { a[dt][k] = a[dt][k].filter(x => x !== 'e5'); });
+    (a[dt].A = a[dt].A || []).push('e5');
+  });
+  const rv = Solver.revalidate(data, a);
+  ok(rv.violations.some(v => v.ruleId === 'OPS-A07'), '手動で週上限を超えたら検出する',
+    rv.violations.filter(v => v.level === 'hard').map(v => v.ruleId).join(','));
+}
+
+/* =======================================================================
    シナリオ7：新人の教育ペア
    ======================================================================= */
 T('シナリオ7：新人は必ず教育担当と同じ勤務になる');

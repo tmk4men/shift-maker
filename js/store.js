@@ -35,7 +35,7 @@ var Store = (function () {
         leader: false, certified: false, trainer: false, newbie: false, minor: false,
         canShift: shiftTypes.map(function (s) { return s.id; }),
         ngWeekdays: [], priority: 0,
-        minDays: 0, maxDays: 22, maxConsecutive: 5, maxHoursMonth: 0, maxNights: 0,
+        minDays: 0, maxDays: 22, maxConsecutive: 5, maxHoursMonth: 0, maxNights: 0, weeklyHoursCap: 0,
         ngPartners: [], goodPartners: [], trainerId: '',
         incomeCap: 0, ytdEarnings: 0, note: ''
       }, o);
@@ -180,7 +180,7 @@ var Store = (function () {
       if (!e.id) e.id = U.uid('e');
       if (!e.name) e.name = '従業員' + (i + 1);
       e.wage = Math.max(0, +e.wage || 0);
-      ['minDays', 'maxDays', 'maxConsecutive', 'maxHoursMonth', 'maxNights', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
+      ['minDays', 'maxDays', 'maxConsecutive', 'maxHoursMonth', 'maxNights', 'weeklyHoursCap', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
         e[k] = Math.max(0, +e[k] || 0);
       });
       e.priority = Math.max(-3, Math.min(3, +e.priority || 0));
@@ -258,6 +258,31 @@ var Store = (function () {
 
   function get() { return data || load(); }
   function reset() { data = sampleData(); save(); return data; }
+
+  /** 初期サンプルのまま触られていないか（案内を出すかの判定用） */
+  function isSample() {
+    var d = get();
+    return d.settings.storeName === 'サンプル店'
+      && d.employees.length === 10
+      && d.employees[0] && d.employees[0].id === 'e1' && d.employees[0].name === '田中 店長';
+  }
+
+  /** サンプルを消して、自分の店を1から作る状態にする */
+  function startFresh() {
+    var base = sampleData();
+    data = {
+      version: 1,
+      settings: Object.assign({}, base.settings, { storeName: '' }),
+      shiftTypes: U.clone(base.shiftTypes),     // 早番/遅番/夜勤の雛形は残す
+      demand: { byWeekday: {}, roleReq: {}, overrides: {} },
+      employees: [], requests: {}, avail: {}, submissions: {},
+      assignments: {}, prevMonth: {}, carryover: {}, ruleConfig: {}, lastResult: null
+    };
+    migrate();
+    Object.keys(data.demand.byWeekday).forEach(function (k) { data.demand.byWeekday[k] = [0, 0, 0, 0, 0, 0, 0]; });
+    save();
+    return data;
+  }
 
   function exportJson() {
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -361,6 +386,7 @@ var Store = (function () {
 
   return {
     load: load, save: save, get: get, reset: reset, setData: setData,
+    isSample: isSample, startFresh: startFresh,
     exportJson: exportJson, importJson: importJson, sampleData: sampleData,
     removeEmployee: removeEmployee, removeShiftType: removeShiftType,
     exportSubmission: exportSubmission, importSubmission: importSubmission, onSaveError: onSaveError,

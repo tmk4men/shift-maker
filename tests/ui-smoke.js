@@ -246,6 +246,41 @@ if (staffBoot) {
   ok(!btns.some(t => t.indexOf('シフトを自動作成') >= 0), '  → 管理用ボタンは出ない');
 }
 
+tryRun('スタッフ専用モードで自分のシフトが見られる', () => {
+  const b = bootStaffMode('?staff=e1', sb => {
+    sb.Store.reset();
+    const d = sb.Store.get();
+    const r = sb.Solver.generate(d);
+    d.assignments = r.assignments; d.lastResult = r;
+    sb.Store.save();
+  });
+  const txt = b.ids['panel-request'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('自分のシフト') < 0) throw new Error('シフト表示への導線がない');
+  if (txt.indexOf('出勤日数') < 0) throw new Error('自分のシフトが表示されていない');
+  // 勤務区分名が出ているか
+  const names = b.sb.Store.get().shiftTypes.map(s => s.name);
+  if (!names.some(n => txt.indexOf(n) >= 0)) throw new Error('勤務内容が出ていない');
+});
+
+tryRun('シフト未作成なら希望提出画面から始まる', () => {
+  const b = bootStaffMode('?staff=e1', sb => { sb.Store.reset(); });
+  const txt = b.ids['panel-request'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('提出する') < 0) throw new Error('提出画面が出ていない');
+});
+
+tryRun('サンプルを消して空から始められる', () => {
+  const b = bootStaffMode('', sb => { sb.Store.reset(); });
+  const S = b.sb.Store;
+  if (!S.isSample()) throw new Error('サンプル判定が効かない');
+  S.startFresh();
+  const d = S.get();
+  if (d.employees.length !== 0) throw new Error('従業員が残っている');
+  if (Object.keys(d.assignments).length !== 0) throw new Error('シフトが残っている');
+  if (!d.shiftTypes.length) throw new Error('勤務区分の雛形まで消えている');
+  if (S.isSample()) throw new Error('まだサンプル扱いのまま');
+  b.sb.Solver.generate(d);   // 空でも落ちないこと
+});
+
 tryRun('存在しないスタッフIDでも落ちない', () => {
   const b = bootStaffMode('?staff=zzz', sb => { sb.Store.reset(); });
   if (b.ids['panel-request'].children.length === 0) throw new Error('案内が出ない');

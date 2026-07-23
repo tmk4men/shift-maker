@@ -4,6 +4,7 @@
   var el = U.el;
   var currentTab = 'setup';
   var staffView = '';     // 提出画面を開いている従業員ID
+  var staffPage = '';     // スタッフ専用モードの表示（shift = 自分のシフト / submit = 希望提出）
 
   /* スタッフ専用モード：?staff=従業員ID で開くと提出画面だけになる（管理操作は出さない） */
   var staffOnly = '';
@@ -71,6 +72,30 @@
   function renderSetup() {
     var p = document.getElementById('panel-setup'); p.innerHTML = '';
     var s = D.settings;
+
+    /* サンプルのままなら、まず消して始められるように案内する */
+    if (Store.isSample()) {
+      p.appendChild(card('👋 いまはサンプルのお店が入っています',
+        'まずは［④ シフト表］の［シフトを自動作成］を押すと、どんな結果が出るか試せます。' +
+        '自分のお店で使うときは下のボタンで空にしてから始めてください。', [
+        el('div', { class: 'row' }, [
+          el('button', {
+            class: 'btn', text: '🧹 サンプルを消して自分の店を作る', onclick: function () {
+              if (!confirm('サンプルの従業員・シフトをすべて消して、空の状態から始めます。よろしいですか？')) return;
+              D = Store.startFresh(); currentTab = 'setup'; render();
+              toast('空にしました。店舗名・勤務区分・必要人数から設定してください');
+            }
+          }),
+          el('button', { class: 'btn ghost', text: 'このまま試す', onclick: function () { switchTab('shift'); } })
+        ])
+      ]));
+    }
+
+    /* データの保存場所についての注意（消えると困るので最初に伝える） */
+    p.appendChild(el('div', { class: 'violation', style: 'margin-bottom:16px' }, [
+      el('div', { class: 'vt', text: '⚠ データはこのブラウザの中だけに保存されます' }),
+      el('div', { class: 'vd', text: 'ブラウザの履歴・サイトデータを消すと、シフトも従業員も消えます。シークレットウィンドウでは保存されません。大事な月は右上の［書き出し］でファイルに残してください。' })
+    ]));
 
     p.appendChild(card('店舗・対象月', 'まずはここだけ設定すれば動きます。', [
       el('div', { class: 'row' }, [
@@ -221,7 +246,7 @@
             id: U.uid('e'), name: '新しい従業員', wage: 1100, employment: 'part',
             leader: false, certified: false, trainer: false, newbie: false, minor: false,
             canShift: D.shiftTypes.map(function (s) { return s.id; }), ngWeekdays: [], priority: 0,
-            minDays: 0, maxDays: 20, maxConsecutive: 5, maxHoursMonth: 0, maxNights: 0,
+            minDays: 0, maxDays: 20, maxConsecutive: 5, maxHoursMonth: 0, maxNights: 0, weeklyHoursCap: 0,
             ngPartners: [], goodPartners: [], trainerId: '', incomeCap: 0, ytdEarnings: 0, note: ''
           };
           D.employees.push(e); Store.save(); editEmp(e);
@@ -270,10 +295,15 @@
       field('連勤上限', input('number', e.maxConsecutive, function (ev) { e.maxConsecutive = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('月間上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月間夜勤上限(0=なし)', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
+      field('週の上限時間(0=なし)', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
       field('優遇度 -3〜+3', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
         return { v: v, t: v > 0 ? '+' + v + '（多めに）' : v < 0 ? v + '（控えめに）' : '0（標準）' };
       }), e.priority, function (ev) { e.priority = +ev.target.value; }))
     ]));
+
+    b.appendChild(el('p', { class: 'hint', style: 'margin-top:6px', text:
+      '※「週の上限時間」は社会保険に入りたくない人の調整に使います。2026年10月から月額8.8万円（106万円）の要件が撤廃され、'
+      + '週20時間以上が加入の分かれ目になるため、その場合は 19 などを設定してください。' }));
 
     b.appendChild(el('h4', { text: '年収の壁（扶養内で働きたい人）', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, [
@@ -1089,7 +1119,89 @@
         'このリンクの従業員（' + staffOnly + '）は登録されていません。責任者にリンクを確認してください。', []));
       return;
     }
-    p.appendChild(staffSubmitCard(e, Store.monthDates()));
+
+    // シフトが出来ていればそちらを先に見せる（スタッフが一番知りたいのは「自分がいつ入るか」）
+    var mine = myShifts(e.id);
+    if (!staffPage) staffPage = mine.length ? 'shift' : 'submit';
+
+    p.appendChild(el('div', { class: 'row', style: 'margin-bottom:12px' }, [
+      el('button', {
+        class: 'btn ' + (staffPage === 'shift' ? '' : 'ghost'), text: '🗓 自分のシフト' + (mine.length ? '（' + mine.length + '日）' : ''),
+        onclick: function () { staffPage = 'shift'; render(); }
+      }),
+      el('button', {
+        class: 'btn ' + (staffPage === 'submit' ? '' : 'ghost'), text: '✏️ 希望を出す',
+        onclick: function () { staffPage = 'submit'; render(); }
+      })
+    ]));
+
+    if (staffPage === 'shift') p.appendChild(myShiftCard(e, mine));
+    else p.appendChild(staffSubmitCard(e, Store.monthDates()));
+  }
+
+  /** その人の今月の勤務を並べる */
+  function myShifts(empId) {
+    return Store.monthDates().map(function (date) {
+      var stId = shiftOfEmp(empId, date);
+      if (!stId) return null;
+      var st = Store.stById(stId);
+      if (!st) return null;
+      return { date: date, st: st, calc: Store.stCalc(st) };
+    }).filter(Boolean);
+  }
+
+  function myShiftCard(e, mine) {
+    if (!mine.length) {
+      return card('🗓 ' + e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）', '', [
+        el('p', { text: 'この月のシフトはまだ出ていません。' }),
+        el('p', { class: 'hint', text: '責任者がシフトを作成すると、このページに表示されます。先に「希望を出す」から希望を提出しておいてください。' })
+      ]);
+    }
+
+    var totalMin = mine.reduce(function (a, m) { return a + m.calc.work; }, 0);
+    var nights = mine.filter(function (m) { return m.calc.night > 0; }).length;
+
+    var rows = mine.map(function (m) {
+      var w = U.weekdayOf(m.date);
+      var end = m.calc.overnight ? m.st.end + '（翌日）' : m.st.end;
+      return el('tr', { class: 'day-row' }, [
+        el('td', {
+          class: 'daycell ' + (w === 0 || Store.isHoliday(m.date) ? 'sun' : w === 6 ? 'sat' : ''),
+          'data-label': '日付', text: (+m.date.slice(8)) + '日（' + U.WD[w] + '）'
+        }),
+        el('td', { 'data-label': '勤務' }, [
+          el('span', { class: 'chip', style: 'background:' + m.st.color + '55;border-color:' + m.st.color, text: m.st.name })
+        ]),
+        el('td', { 'data-label': '時間', text: m.st.start + ' 〜 ' + end }),
+        el('td', { 'data-label': '休憩', text: m.st.breakMin + '分' }),
+        el('td', { 'data-label': '実働', text: U.min2h(m.calc.work) + 'h' })
+      ]);
+    });
+
+    return card('🗓 ' + e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）',
+      '責任者が変更した場合は内容が変わることがあります。', [
+      el('div', { class: 'grid2', style: 'margin-bottom:12px' }, [
+        stat('出勤日数', mine.length + ' 日'),
+        stat('実働時間', U.min2h(totalMin) + ' h'),
+        nights ? stat('夜勤', nights + ' 回') : null,
+        stat('次の出勤', nextShiftLabel(mine))
+      ].filter(Boolean)),
+      el('div', { class: 'scroll staff-table', style: 'max-height:60vh' }, [el('table', {}, [
+        el('thead', {}, [el('tr', {}, ['日付', '勤務', '時間', '休憩', '実働'].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, rows)
+      ])]),
+      el('div', { class: 'row', style: 'margin-top:12px' }, [
+        el('button', { class: 'btn ghost', text: '🖨 印刷する', onclick: function () { if (typeof window !== 'undefined' && window.print) window.print(); } })
+      ])
+    ]);
+  }
+
+  function nextShiftLabel(mine) {
+    var t = new Date();
+    var today = t.getFullYear() + '-' + U.pad(t.getMonth() + 1) + '-' + U.pad(t.getDate());
+    var next = mine.filter(function (m) { return m.date >= today; })[0];
+    if (!next) return 'なし';
+    return (+next.date.slice(5, 7)) + '/' + (+next.date.slice(8)) + ' ' + next.st.name;
   }
 
   /* ================= タブ・初期化 ================= */
