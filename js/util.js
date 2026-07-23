@@ -108,6 +108,20 @@ var U = (function () {
     return '"' + String(v === undefined || v === null ? '' : v).replace(/"/g, '""') + '"';
   }
 
+  /** PINの保存用ハッシュ。
+   *  注意：これは暗号学的な保護ではない。端末の中だけで動くアプリなので、
+   *  開発者ツールを開ける人には突破できる。目的は「誤って設定を触られない」こと。 */
+  function pinHash(pin) {
+    var s = 'shift-maker:' + String(pin);
+    var h1 = 0x811c9dc5, h2 = 0x1000193;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      h1 = ((h1 ^ c) * 16777619) >>> 0;
+      h2 = ((h2 + c) * 31 + (i + 1)) >>> 0;
+    }
+    return h1.toString(36) + '-' + h2.toString(36);
+  }
+
   /* ---------- 日本の祝日（自動計算・設定不要） ---------- */
   var holidayCache = {};
 
@@ -164,7 +178,8 @@ var U = (function () {
     pad: pad, ymd: ymd, parseYmd: parseYmd, daysInMonth: daysInMonth, weekdayOf: weekdayOf,
     WD: WD, monthDates: monthDates, addDays: addDays, hm2min: hm2min, min2hm: min2hm,
     min2h: min2h, overlap: overlap, yen: yen, el: el, esc: esc, uid: uid, clone: clone,
-    num: num, isTime: isTime, csv: csv, jpHolidays: jpHolidays, nthMonday: nthMonday
+    num: num, isTime: isTime, csv: csv, jpHolidays: jpHolidays, nthMonday: nthMonday,
+    pinHash: pinHash
   };
 })();
 

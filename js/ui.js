@@ -55,6 +55,28 @@
     });
     return s;
   }
+  /* ================= 管理画面の簡易ロック ================= */
+  var ADMIN_TABS = { setup: 1, staff: 1, rules: 1 };
+
+  /** ロック中か（PIN未設定なら常に解除扱い） */
+  function locked() { return !Store.isUnlocked(); }
+
+  /** ロックされていれば PIN を聞き、通ったら then() を実行する */
+  function requireUnlock(then) {
+    if (!locked()) { then(); return; }
+    var msg = el('p', { class: 'hint', text: '管理用のPIN（4桁）を入力してください。' });
+    var inp = input('password', '', null, { inputmode: 'numeric', maxlength: 8, style: 'font-size:24px;letter-spacing:.4em;text-align:center;width:160px' });
+    function submit() {
+      if (Store.tryUnlock(inp.value)) { closeModal(); D = Store.get(); then(); }
+      else { msg.textContent = 'PINが違います。'; inp.value = ''; }
+    }
+    inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
+    modal('管理画面のロック', el('div', {}, [msg, el('div', { class: 'row' }, [inp])]), [
+      el('button', { class: 'btn', text: '解除', onclick: submit }),
+      el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
+    ]);
+  }
+
   /* ================= 手順ガイド ================= */
   /** いまどこまで進んでいて、次に何をすればいいか */
   function steps() {
@@ -111,27 +133,38 @@
     var p = document.getElementById('panel-setup'); p.innerHTML = '';
     var s = D.settings;
 
-    /* サンプルのままなら、まず消して始められるように案内する */
-    if (Store.isSample()) {
-      p.appendChild(card('サンプルのお店が入っています',
-        'そのまま試せます。自分の店で使うときは空にしてください。', [
+    /* まだ何も登録されていないときの案内 */
+    if (!D.employees.length) {
+      p.appendChild(card('はじめに',
+        'このページで「勤務区分」と「曜日ごとの必要人数」を決めてから、［② 従業員］に進んでください。', [
         el('div', { class: 'row' }, [
+          el('button', { class: 'btn', text: '② 従業員の登録へ進む', onclick: function () { switchTab('staff'); } }),
           el('button', {
-            class: 'btn', text: 'サンプルを消して空から始める', onclick: function () {
-              if (!confirm('サンプルの従業員・シフトをすべて消して、空の状態から始めます。よろしいですか？')) return;
-              D = Store.startFresh(); currentTab = 'setup'; render();
-              toast('空にしました。店舗名・勤務区分・必要人数から設定してください');
+            class: 'btn ghost', text: 'サンプルの店で動きを見る', onclick: function () {
+              if (!confirm('サンプルの店（10名・1か月分の希望入り）を読み込みます。\n今の内容は上書きされます。よろしいですか？')) return;
+              D = Store.loadDemo(); render();
+              toast('サンプルを読み込みました。［④ シフト表］で作成を試せます');
             }
-          }),
-          el('button', { class: 'btn ghost', text: 'このまま試す', onclick: function () { switchTab('shift'); } })
+          })
         ])
+      ]));
+    } else if (Store.isSample()) {
+      p.appendChild(card('いまはサンプルの店です',
+        '自分の店で使うときは、下のボタンで空にしてから始めてください。', [
+        el('button', {
+          class: 'btn ghost danger', text: '全部消して空から始める', onclick: function () {
+            if (!confirm('従業員・希望・シフトをすべて消して、空の状態から始めます。よろしいですか？')) return;
+            D = Store.startFresh(); currentTab = 'setup'; render();
+            toast('空にしました');
+          }
+        })
       ]));
     }
 
     /* データの保存場所についての注意（消えると困るので最初に伝える） */
     p.appendChild(el('div', { class: 'violation', style: 'margin-bottom:16px' }, [
-      el('div', { class: 'vt', text: 'データはこのブラウザにのみ保存されます' }),
-      el('div', { class: 'vd', text: 'ブラウザのデータを消すと失われます。右上の［書き出し］でファイルに残せます。' })
+      el('div', { class: 'vt', text: 'データはこの端末にのみ保存されます' }),
+      el('div', { class: 'vd', text: 'アプリのデータを消すと失われます。右上の［書き出し］でファイルに残せます。' })
     ]));
 
     p.appendChild(card('店舗・対象月', null, [
@@ -251,6 +284,57 @@
 
     p.appendChild(card('必要人数（曜日別）', null, [
       el('table', {}, [el('thead', {}, [head]), el('tbody', {}, rows)])
+    ]));
+
+    /* 管理画面のロック */
+    p.appendChild(card('管理画面のロック',
+      '共用のタブレットやPCで使うとき、スタッフに設定を触られないようにします。', [
+      el('div', { class: 'row' }, [
+        el('span', { class: 'badge ' + (Store.hasPin() ? 'ok' : 'warn'), text: Store.hasPin() ? 'PIN設定済み' : 'ロックなし' }),
+        Store.hasPin() ? el('button', {
+          class: 'btn ghost', text: 'いますぐロックする', onclick: function () {
+            Store.lockNow(); switchTab('shift'); toast('ロックしました');
+          }
+        }) : null,
+        el('button', {
+          class: 'btn ' + (Store.hasPin() ? 'ghost' : ''), text: Store.hasPin() ? 'PINを変更する' : 'PINを設定する',
+          onclick: function () {
+            var i1 = input('password', '', null, { inputmode: 'numeric', maxlength: 8, style: 'font-size:20px;letter-spacing:.3em;text-align:center;width:150px' });
+            var i2 = input('password', '', null, { inputmode: 'numeric', maxlength: 8, style: 'font-size:20px;letter-spacing:.3em;text-align:center;width:150px' });
+            var msg = el('p', { class: 'hint', text: '4桁以上の数字を決めてください。' });
+            modal('PINの設定', el('div', {}, [
+              msg,
+              el('div', { class: 'row' }, [field('新しいPIN', i1), field('もう一度', i2)]),
+              el('div', { class: 'violation hard', style: 'margin-top:16px' }, [
+                el('div', { class: 'vt', text: 'PINを忘れると管理画面を開けなくなります' }),
+                el('div', { class: 'vd', text: '設定する前に、右上の［書き出し］でデータをファイルに保存しておいてください。忘れた場合はアプリのデータを消してから、そのファイルを読み込み直すことになります。' })
+              ]),
+              el('div', { class: 'violation', style: 'margin-top:8px' }, [
+                el('div', { class: 'vt', text: 'これは本物の鍵ではありません' }),
+                el('div', { class: 'vd', text: 'すべてこの端末の中で動くため、詳しい人には突破できます。誤って設定を触られるのを防ぐための蓋です。共用端末では、iPadの「アクセスガイド」やAndroidの「画面のピン留め」を併用すると確実です。' })
+              ])
+            ]), [
+              el('button', {
+                class: 'btn', text: '設定する', onclick: function () {
+                  if (!/^\d{4,8}$/.test(i1.value)) { msg.textContent = '4〜8桁の数字で入れてください。'; return; }
+                  if (i1.value !== i2.value) { msg.textContent = '2つの入力が一致しません。'; return; }
+                  Store.setPin(i1.value); closeModal(); D = Store.get(); render();
+                  toast('PINを設定しました');
+                }
+              }),
+              el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
+            ]);
+          }
+        }),
+        Store.hasPin() ? el('button', {
+          class: 'btn ghost danger', text: 'PINを解除する', onclick: function () {
+            if (!confirm('PINを解除します。誰でも設定を変更できる状態になります。よろしいですか？')) return;
+            Store.setPin(''); D = Store.get(); render(); toast('PINを解除しました');
+          }
+        }) : null
+      ]),
+      el('p', { class: 'hint', style: 'margin:12px 0 0', text:
+        'ロック中は［① 基本設定］［② 従業員］［⑥ ルール設定］と、読み込み・初期化が開けなくなります。シフト表と集計は見られます。アプリを閉じると再びロックされます。' })
     ]));
 
     /* 特定日の調整 */
@@ -508,7 +592,7 @@
     var b = el('div', {}, [
       el('p', { class: 'hint', text: 'このURLを開くと、' + e.name + ' さんの希望提出画面だけが表示されます（管理用の設定は出ません）。' }),
       ta,
-      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ データはこのブラウザにだけ保存されます。別の端末では共有されません。スタッフのスマホで入力してもらう場合は［スタッフ用の入力ページ］を使ってください。' })
+      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ データはこの端末にだけ保存されます。別の端末とは共有されません。スタッフのスマホで入力してもらう場合は［スタッフ用の入力ページ］を使ってください。' })
     ]);
     modal('スタッフ用リンク', b, [
       el('button', {
@@ -1718,6 +1802,10 @@
 
   /* ================= タブ・初期化 ================= */
   function switchTab(name) {
+    if (ADMIN_TABS[name] && locked()) {
+      requireUnlock(function () { switchTab(name); });
+      return;
+    }
     currentTab = name;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
       t.classList.toggle('active', t.dataset.tab === name);
@@ -1732,6 +1820,18 @@
     D = Store.get();
     if (inputMode) return renderInputPage();
     if (staffOnly) return renderStaffOnly();
+
+    // ロック中に管理タブが開いたままにならないようにする（起動直後もここを通る）
+    if (ADMIN_TABS[currentTab] && locked()) {
+      currentTab = 'shift';
+      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
+        t.classList.toggle('active', t.dataset.tab === currentTab);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('.panel'), function (pn) {
+        pn.classList.toggle('hidden', pn.id !== 'panel-' + currentTab);
+      });
+    }
+
     if (currentTab === 'setup') renderSetup();
     if (currentTab === 'staff') renderStaff();
     if (currentTab === 'request') renderRequest();
@@ -1751,7 +1851,9 @@
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
   document.getElementById('btnExport').addEventListener('click', function () { Store.exportJson(); });
-  document.getElementById('btnImport').addEventListener('click', function () { document.getElementById('fileImport').click(); });
+  document.getElementById('btnImport').addEventListener('click', function () {
+    requireUnlock(function () { document.getElementById('fileImport').click(); });
+  });
   document.getElementById('fileImport').addEventListener('change', function (e) {
     var f = e.target.files[0]; if (!f) return;
     var r = new FileReader();
@@ -1767,8 +1869,10 @@
     e.target.value = '';
   });
   document.getElementById('btnReset').addEventListener('click', function () {
-    if (!confirm('すべてのデータを初期状態に戻します。よろしいですか？')) return;
-    D = Store.reset(); render(); toast('初期化しました');
+    requireUnlock(function () {
+      if (!confirm('すべてのデータを初期状態に戻します。よろしいですか？')) return;
+      D = Store.reset(); render(); toast('初期化しました');
+    });
   });
 
   render();
