@@ -64,6 +64,51 @@
     });
     return s;
   }
+  /* ================= 手順ガイド ================= */
+  /** いまどこまで進んでいて、次に何をすればいいか */
+  function steps() {
+    var dates = Store.monthDates();
+    var needSet = dates.some(function (d) {
+      return D.shiftTypes.some(function (st) { return Store.needOf(d, st.id) > 0; });
+    });
+    var hasShift = dates.some(function (d) {
+      return D.shiftTypes.some(function (st) { return Store.assignedOf(d, st.id).length > 0; });
+    });
+    return [
+      { n: 1, tab: 'setup', label: '店の設定', done: needSet, todo: '勤務区分と必要人数を決める' },
+      { n: 2, tab: 'staff', label: 'スタッフ登録', done: D.employees.length > 0, todo: 'スタッフを登録する' },
+      { n: 3, tab: 'request', label: '希望を集める', done: Store.submittedCount() > 0, todo: '希望休・出勤できる日を入れる' },
+      { n: 4, tab: 'shift', label: 'シフト作成', done: hasShift, todo: 'シフトを自動作成する' }
+    ];
+  }
+
+  function guideBar() {
+    var st = steps();
+    var next = st.filter(function (s) { return !s.done; })[0];
+
+    var strip = el('div', { class: 'guide' }, st.map(function (s, i) {
+      var state = s.done ? 'done' : (next && next.n === s.n ? 'now' : '');
+      return el('button', {
+        class: 'guide-step ' + state, onclick: function () { switchTab(s.tab); },
+        title: s.todo
+      }, [
+        el('span', { class: 'guide-n', text: s.done ? '✓' : String(s.n) }),
+        el('span', { text: s.label })
+      ]);
+    }));
+
+    var msg = next
+      ? el('div', { class: 'guide-next' }, [
+        el('span', { text: '次にやること：' + next.todo }),
+        el('button', { class: 'btn sm', text: '開く', onclick: function () { switchTab(next.tab); } })
+      ])
+      : el('div', { class: 'guide-next done' }, [
+        el('span', { text: 'シフトができました。④で内容を確認し、③のスタッフ用リンクで共有できます。' })
+      ]);
+
+    return el('div', { class: 'guide-wrap' }, [strip, msg]);
+  }
+
   function card(title, hint, children) {
     return el('div', { class: 'card' }, [el('h2', { text: title }), hint ? el('p', { class: 'hint', text: hint }) : null].concat(children));
   }
@@ -75,12 +120,11 @@
 
     /* サンプルのままなら、まず消して始められるように案内する */
     if (Store.isSample()) {
-      p.appendChild(card('👋 いまはサンプルのお店が入っています',
-        'まずは［④ シフト表］の［シフトを自動作成］を押すと、どんな結果が出るか試せます。' +
-        '自分のお店で使うときは下のボタンで空にしてから始めてください。', [
+      p.appendChild(card('サンプルのお店が入っています',
+        'そのまま試せます。自分の店で使うときは空にしてください。', [
         el('div', { class: 'row' }, [
           el('button', {
-            class: 'btn', text: '🧹 サンプルを消して自分の店を作る', onclick: function () {
+            class: 'btn', text: 'サンプルを消して空から始める', onclick: function () {
               if (!confirm('サンプルの従業員・シフトをすべて消して、空の状態から始めます。よろしいですか？')) return;
               D = Store.startFresh(); currentTab = 'setup'; render();
               toast('空にしました。店舗名・勤務区分・必要人数から設定してください');
@@ -93,11 +137,11 @@
 
     /* データの保存場所についての注意（消えると困るので最初に伝える） */
     p.appendChild(el('div', { class: 'violation', style: 'margin-bottom:16px' }, [
-      el('div', { class: 'vt', text: '⚠ データはこのブラウザの中だけに保存されます' }),
-      el('div', { class: 'vd', text: 'ブラウザの履歴・サイトデータを消すと、シフトも従業員も消えます。シークレットウィンドウでは保存されません。大事な月は右上の［書き出し］でファイルに残してください。' })
+      el('div', { class: 'vt', text: 'データはこのブラウザにのみ保存されます' }),
+      el('div', { class: 'vd', text: 'ブラウザのデータを消すと失われます。右上の［書き出し］でファイルに残せます。' })
     ]));
 
-    p.appendChild(card('店舗・対象月', 'まずはここだけ設定すれば動きます。', [
+    p.appendChild(card('店舗・対象月', null, [
       el('div', { class: 'row' }, [
         field('店舗名', input('text', s.storeName, function (e) { s.storeName = e.target.value; Store.save(); })),
         field('年', input('number', s.year, function (e) { s.year = U.num(e.target.value, 2000, 2100, s.year); saveAndRender(); }, { min: 2000, max: 2100 })),
@@ -145,7 +189,7 @@
       ]);
     });
 
-    p.appendChild(card('勤務区分', '早番・遅番・夜勤など。終了が開始より前なら日跨ぎ（夜勤）として自動計算します。', [
+    p.appendChild(card('勤務区分', '終了が開始より前なら日跨ぎ（夜勤）として計算します。', [
       el('table', {}, [
         el('thead', {}, [el('tr', {}, ['名称', '略', '開始', '終了', '休憩(分)', '色', '実働', '深夜', '休憩チェック', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, stRows)
@@ -178,7 +222,7 @@
       ]));
     });
 
-    p.appendChild(card('必要人数（曜日別）', '各曜日・各勤務区分に何人必要か。特定日だけ変えたい場合は下の「特定日の調整」で。', [
+    p.appendChild(card('必要人数（曜日別）', null, [
       el('table', {}, [el('thead', {}, [head]), el('tbody', {}, rows)])
     ]));
 
@@ -201,7 +245,7 @@
       }))
     ]);
     det.appendChild(el('div', { class: 'scroll', style: 'max-height:340px;margin-top:8px' }, [ovTable]));
-    p.appendChild(card('特定日の調整', '空欄なら曜日別の設定が使われます。', [det]));
+    p.appendChild(card('特定日の調整', null, [det]));
   }
 
   /* ================= ② 従業員 ================= */
@@ -235,7 +279,7 @@
       ]);
     });
 
-    p.appendChild(card('従業員', '「優遇度」は多めに入れたい／控えめにしたいの調整。マイナスにしても最低出勤日数は必ず守ります。', [
+    p.appendChild(card('従業員', '優遇度をマイナスにしても、最低出勤日数は必ず守ります。', [
       el('div', { class: 'scroll' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['氏名 / 属性', '時給', '担当可能', '出勤日数', '連勤上限', '優遇度', '年収上限', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
@@ -371,7 +415,7 @@
     });
 
     p.appendChild(card('提出状況　' + done + ' / ' + total + ' 人',
-      'スタッフが「この日は何時から何時まで行けます／休みたいです」を入力します。全員提出、または責任者が締切を押すとシフトを自動作成できます。', [
+      '全員の提出がそろうか、締切を押すと自動作成できます。', [
       el('div', { class: 'row', style: 'margin-bottom:10px' }, [
         field('提出締切日', input('date', D.settings.deadline, function (e) { D.settings.deadline = e.target.value; Store.save(); })),
         el('div', { class: 'field' }, [el('label', { text: '受付' }),
@@ -392,7 +436,7 @@
         el('tbody', {}, statusRows)
       ])]),
       el('div', { class: 'row', style: 'margin-top:10px' }, [
-        el('button', { class: 'btn ghost sm', text: '📥 提出コードを取り込む', onclick: importCodeDialog })
+        el('button', { class: 'btn ghost sm', text: '提出コードを取り込む', onclick: importCodeDialog })
       ])
     ]));
 
@@ -410,7 +454,7 @@
       })));
     });
 
-    p.appendChild(card('希望一覧（責任者が直接編集も可）', 'クリックで 空欄 → 休み希望 → 絶対休 → 有給 → 出勤希望 → 空欄 と切り替わります。', [
+    p.appendChild(card('希望一覧（責任者が直接編集も可）', 'クリックで切り替わります。', [
       el('div', { class: 'legend' }, [
         el('span', { class: 'req-off', text: '△ 休み希望（できれば）' }),
         el('span', { class: 'req-must', text: '× 絶対休' }),
@@ -503,7 +547,7 @@
       if (mode !== 'time' || locked) { fromI.disabled = true; toI.disabled = true; }
 
       var sel = select([
-        { v: '', t: '未入力' }, { v: 'allday', t: '⭕ 終日いつでもOK' }, { v: 'time', t: '🕒 この時間なら行ける' }, { v: 'off', t: '❌ この日は行けない' }
+        { v: '', t: '未入力' }, { v: 'allday', t: '終日OK' }, { v: 'time', t: '時間を指定' }, { v: 'off', t: '行けない' }
       ], mode, function (ev) {
         var v = ev.target.value;
         if (!D.avail[e.id]) D.avail[e.id] = {};
@@ -576,10 +620,10 @@
     var doneCount = dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length;
 
     var foot = locked ? [
-      el('div', { class: 'badge ng', text: '⚠ ' + closed + '。内容の確認のみできます。' })
+      el('div', { class: 'badge ng', text: closed + '（確認のみ）' })
     ] : [
       el('button', {
-        class: 'btn big', text: '✅ この内容で提出する', onclick: function () {
+        class: 'btn big', text: 'この内容で提出する', onclick: function () {
           if (doneCount === 0 && !confirm('まだ1日も入力されていません。このまま提出しますか？')) return;
           var now = new Date();
           D.submissions[e.id] = {
@@ -600,15 +644,15 @@
         }
       }),
       el('button', {
-        class: 'btn ghost', text: '📋 提出コードをコピー', title: '別の端末で入力した場合、このコードを責任者に送ってください',
+        class: 'btn ghost', text: '提出コードをコピー', title: '別の端末で入力した場合、このコードを責任者に送ってください',
         onclick: function () { showSubmissionCode(e); }
       }),
       staffOnly ? null : el('button', { class: 'btn ghost', text: '閉じる', onclick: function () { staffView = ''; render(); } })
     ];
 
     var sub = Store.submissionOf(e.id);
-    return card('📱 ' + e.name + ' さんの希望提出（' + D.settings.year + '年' + D.settings.month + '月）',
-      '「行ける日と時間」を選んで、いちばん下の提出ボタンを押してください。' +
+    return card(e.name + ' さんの希望提出（' + D.settings.year + '年' + D.settings.month + '月）',
+      '行ける日と時間を選んで、下のボタンで提出してください。' +
       (D.settings.deadline ? '　提出期限：' + D.settings.deadline : ''), [
       el('div', { class: 'row', style: 'margin-bottom:8px' }, [
         el('span', { class: 'badge ' + (sub.status === 'submitted' ? 'ok' : 'warn'), text: sub.status === 'submitted' ? '提出済み（' + sub.at + '）' : '未提出' }),
@@ -669,7 +713,7 @@
       el('strong', { style: 'font-size:16px', text: D.settings.year + '年 ' + D.settings.month + '月' }),
       el('button', { class: 'btn ghost sm', text: '翌月 ▶', onclick: function () { moveMonth(1); } }),
       el('span', { style: 'width:12px' }),
-      el('button', { class: 'btn big', text: '⚙ シフトを自動作成', onclick: doGenerate }),
+      el('button', { class: 'btn big', text: 'シフトを自動作成', onclick: doGenerate }),
       el('button', {
         class: 'btn ghost', text: 'この月を空にする', onclick: function () {
           if (!confirm(D.settings.month + '月のシフトを消します。よろしいですか？（他の月は残ります）')) return;
@@ -696,7 +740,7 @@
     /* 作成前チェック：作る前に分かる問題を先に出す */
     var pre = preflight();
     if (pre.length) {
-      p.appendChild(card('作成前チェック', '作る前に気づける問題です。このままでも作成できますが、結果に反映されます。',
+      p.appendChild(card('作成前チェック', null,
         pre.map(function (x) {
           return el('div', { class: 'violation ' + (x.level === 'ng' ? 'hard' : '') }, [
             el('div', { class: 'vt', text: x.msg }),
@@ -764,7 +808,7 @@
       })).concat([el('td', {}), el('td', {})]));
     });
 
-    p.appendChild(card('シフト表', 'セルをクリックすると勤務を変更できます。「なぜこの人か」も表示されます。', [
+    p.appendChild(card('シフト表', 'セルをクリックで変更できます。', [
       el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [thead]), el('tbody', {}, rows.concat(needRows))])])
     ]));
   }
@@ -1004,7 +1048,7 @@
     });
 
     var totalHours = D.employees.reduce(function (a, e) { return a + st[e.id].hours; }, 0);
-    p.appendChild(card('集計', '公平性のチェックにも使えます。', [
+    p.appendChild(card('集計', null, [
       el('div', { class: 'grid2' }, [
         stat('総労働時間', totalHours.toFixed(1) + ' h'),
         stat('概算人件費', U.yen(rv.totalPay)),
@@ -1061,12 +1105,12 @@
 
     /* かんたん設定（プリセット） */
     var PRESETS = {
-      balanced: { label: '⚖ バランス重視', desc: '希望と公平性のバランス（初期設定）', w: {} },
-      request: { label: '🙋 希望重視', desc: '希望休をできるだけ通す。公平性は少し犠牲に', w: { 'OPS-030': 20000, 'OPS-031': 8000, 'OPS-080': 400, 'OPS-081': 300, 'OPS-084': 800 } },
-      fair: { label: '⚖ 公平重視', desc: '夜勤・土日・労働時間の偏りを最小に', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
-      cost: { label: '💰 人件費重視', desc: '単価の高い人の投入を抑える（予算設定が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
+      balanced: { label: 'バランス重視', desc: '希望と公平性のバランス（初期設定）', w: {} },
+      request: { label: '希望重視', desc: '希望休をできるだけ通す。公平性は少し犠牲に', w: { 'OPS-030': 20000, 'OPS-031': 8000, 'OPS-080': 400, 'OPS-081': 300, 'OPS-084': 800 } },
+      fair: { label: '公平重視', desc: '夜勤・土日・労働時間の偏りを最小に', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
+      cost: { label: '人件費重視', desc: '単価の高い人の投入を抑える（予算設定が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
     };
-    p.appendChild(card('かんたん設定', '細かい数字を触らずに、方針だけ選べます。押すと下の重みがまとめて変わります。', [
+    p.appendChild(card('かんたん設定', '方針を選ぶと、下の重みがまとめて変わります。', [
       el('div', { class: 'row' }, Object.keys(PRESETS).map(function (k) {
         var ps = PRESETS[k];
         return el('button', {
@@ -1082,11 +1126,11 @@
           }
         });
       })),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: '※ 法令ルールはどの設定でも必ず守られます。' })
+      el('p', { class: 'hint', style: 'margin-top:8px', text: '法令ルールはどの設定でも守られます。' })
     ]));
 
-    p.appendChild(card('法令ルール（変更不可）', 'rules/01-legal.md に対応。労働基準法などに基づく制約です。', groups.law.map(ruleRow)));
-    p.appendChild(card('運用ルール', 'rules/02-operational.md・05-real-world-knowledge.md に対応。現場に合わせて調整できます。', groups.ops.map(ruleRow)));
+    p.appendChild(card('法令ルール（変更不可）', '労働基準法などに基づく制約です。', groups.law.map(ruleRow)));
+    p.appendChild(card('運用ルール', '現場に合わせて調整できます。', groups.ops.map(ruleRow)));
   }
 
   function setRule(id, patch) {
@@ -1126,11 +1170,11 @@
 
     p.appendChild(el('div', { class: 'row', style: 'margin-bottom:12px' }, [
       el('button', {
-        class: 'btn ' + (staffPage === 'shift' ? '' : 'ghost'), text: '🗓 自分のシフト' + (mine.length ? '（' + mine.length + '日）' : ''),
+        class: 'btn ' + (staffPage === 'shift' ? '' : 'ghost'), text: '自分のシフト' + (mine.length ? '（' + mine.length + '日）' : ''),
         onclick: function () { staffPage = 'shift'; render(); }
       }),
       el('button', {
-        class: 'btn ' + (staffPage === 'submit' ? '' : 'ghost'), text: '✏️ 希望を出す',
+        class: 'btn ' + (staffPage === 'submit' ? '' : 'ghost'), text: '希望を出す',
         onclick: function () { staffPage = 'submit'; render(); }
       })
     ]));
@@ -1152,7 +1196,7 @@
 
   function myShiftCard(e, mine) {
     if (!mine.length) {
-      return card('🗓 ' + e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）', '', [
+      return card(e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）', '', [
         el('p', { text: 'この月のシフトはまだ出ていません。' }),
         el('p', { class: 'hint', text: '責任者がシフトを作成すると、このページに表示されます。先に「希望を出す」から希望を提出しておいてください。' })
       ]);
@@ -1178,8 +1222,8 @@
       ]);
     });
 
-    return card('🗓 ' + e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）',
-      '責任者が変更した場合は内容が変わることがあります。', [
+    return card(e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）',
+      null, [
       el('div', { class: 'grid2', style: 'margin-bottom:12px' }, [
         stat('出勤日数', mine.length + ' 日'),
         stat('実働時間', U.min2h(totalMin) + ' h'),
@@ -1191,7 +1235,7 @@
         el('tbody', {}, rows)
       ])]),
       el('div', { class: 'row', style: 'margin-top:12px' }, [
-        el('button', { class: 'btn ghost', text: '🖨 印刷する', onclick: function () { if (typeof window !== 'undefined' && window.print) window.print(); } })
+        el('button', { class: 'btn ghost', text: '印刷', onclick: function () { if (typeof window !== 'undefined' && window.print) window.print(); } })
       ])
     ]);
   }
@@ -1225,6 +1269,11 @@
     if (currentTab === 'shift') renderShift();
     if (currentTab === 'summary') renderSummary();
     if (currentTab === 'rules') renderRules();
+
+    // どのタブでも先頭に「いまどこまで進んでいるか」を出す
+    var p = document.getElementById('panel-' + currentTab);
+    if (p && p.insertBefore && p.children && p.children.length) p.insertBefore(guideBar(), p.children[0]);
+    else if (p) p.appendChild(guideBar());
   }
 
   document.getElementById('tabs').addEventListener('click', function (e) {

@@ -110,6 +110,23 @@ details.rule summary{cursor:pointer;font-weight:700}
 .right{text-align:right}
 .nowrap{white-space:nowrap}
 
+/* ===== 手順ガイド ===== */
+.guide-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:12px 14px;margin-bottom:16px}
+.guide-wrap .guide{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.guide-step{display:flex;align-items:center;gap:7px;background:none;border:1px solid var(--line);
+  border-radius:99px;padding:6px 14px 6px 6px;cursor:pointer;color:var(--muted);font-weight:600;font-size:13px}
+.guide-step:hover{border-color:var(--muted);color:var(--text)}
+.guide-n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  border-radius:50%;background:var(--bg);border:1px solid var(--line);font-size:12px;font-weight:800}
+.guide-step.done{color:var(--ok);border-color:rgba(21,160,106,.4)}
+.guide-step.done .guide-n{background:var(--ok);color:#fff;border-color:var(--ok)}
+.guide-step.now{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.guide-step.now .guide-n{background:var(--accent);color:#fff;border-color:var(--accent)}
+.guide-next{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-weight:600;font-size:13px}
+.guide-next.done{color:var(--ok);font-weight:600}
+
 /* ===== 印刷（休憩室に貼り出す想定：シフト表だけを1枚に） ===== */
 @media print{
   @page{ size: A4 landscape; margin: 8mm; }
@@ -155,3 +172,5 @@ details.rule summary{cursor:pointer;font-weight:700}
   .staff-table select,.staff-table input{flex:1;min-width:0;padding:9px;font-size:15px}
   .staff-table td.sun{color:var(--ng)} .staff-table td.sat{color:var(--accent)}
 }
+
+@media print{ .guide-wrap{display:none !important} }
