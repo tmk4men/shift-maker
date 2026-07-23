@@ -52,6 +52,12 @@ var Solver = (function () {
       }
 
       var pick = targetCands[0];
+      if (targetCands.roleFallback) {
+        var names = { leader: '責任者', certified: '有資格者' };
+        log.push(target.date + ' ' + Store.stById(target.stId).name + '：'
+          + targetCands.roleFallback.map(function (r) { return names[r]; }).join('と')
+          + 'を確保できないため、人数だけ ' + ctx.emp[pick.empId].name + 'さんで充足しました');
+      }
       Rules.doAssign(ctx, target.date, target.stId, pick.empId);
       putTrace(trace, target.date, target.stId, pick.empId, {
         score: Math.round(pick.score), why: pick.why,
@@ -165,8 +171,13 @@ var Solver = (function () {
       if (mustCoverRole && covers < Math.min(missing.length, seatsLeft ? missing.length - (seatsLeft - 1) : 1)) spare.push(item);
       else out.push(item);
     });
-    // 役割を満たす人が誰もいない場合でも、人数だけは埋める（役割不足は違反として報告される）
-    if (!out.length && spare.length) out = spare;
+    // 役割を満たす人が誰もいない場合でも、人数だけは埋める
+    // （空席にすると「人がいない」と「役割がいない」の二重の穴になるため。
+    //   役割不足は OPS-003/004 の違反として必ず報告され、log にも残す）
+    if (!out.length && spare.length) {
+      out = spare;
+      out.roleFallback = missing.slice();
+    }
 
     out.sort(function (a, b) {
       // 席が足りないときは、必須役割を多く満たす人を優先

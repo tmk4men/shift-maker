@@ -279,6 +279,46 @@ tryRun('提出コードの書き出し→取り込みが往復する', () => {
   if (S.submissionOf('e1').status !== 'submitted') throw new Error('提出状態にならない');
 });
 
+tryRun('画面操作での提出コード往復（SHIFT1: の encode → decode）', () => {
+  // ① スタッフ側：入力して［提出コードをコピー］を押す
+  const a = bootStaffMode('?staff=e1', sb => { sb.Store.reset(); });
+  const S = a.sb.Store;
+  const d0 = S.monthDates()[0], d1 = S.monthDates()[1];
+  S.setAvail('e1', d0, { from: '10:00', to: '15:00' });
+  S.get().requests.e1 = {}; S.get().requests.e1[d1] = 'must';
+  S.save();
+  const copyBtn = a.ids['panel-request'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('提出コード') >= 0);
+  if (!copyBtn) throw new Error('提出コードのボタンがない');
+  copyBtn.click();
+  const ta = a.ids['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
+  if (!ta || !ta.value) throw new Error('コードが生成されない');
+  if (ta.value.indexOf('SHIFT1:') !== 0) throw new Error('想定した形式でない: ' + ta.value.slice(0, 20));
+  const code = ta.value;
+
+  // ② 責任者側：別セッションで［提出コードを取り込む］に貼り付ける
+  const b = bootStaffMode('', sb => { sb.Store.reset(); });
+  const req = b.ids['panel-request'];
+  // 希望・提出タブを開く
+  const tabsEl2 = b.ids['tabs'];
+  const btn = makeNode('button'); btn.className = 'tab'; btn.dataset.tab = 'request';
+  btn.classList.contains = c => c === 'tab';
+  (tabsEl2._listeners.click || []).forEach(f => f({ target: btn }));
+  const impBtn = req.all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('取り込む') >= 0);
+  if (!impBtn) throw new Error('取り込みボタンがない');
+  impBtn.click();
+  const ta2 = b.ids['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
+  ta2.value = code;
+  const runBtn = b.ids['modalFoot'].all().concat(b.ids['modalFoot'].children).find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('取り込む') >= 0);
+  if (!runBtn) throw new Error('実行ボタンがない');
+  runBtn.click();
+
+  const S2 = b.sb.Store;
+  const av = S2.availOf('e1', S2.monthDates()[0]);
+  if (!av || av.from !== '10:00' || av.to !== '15:00') throw new Error('勤務可能時間が復元されない: ' + JSON.stringify(av));
+  if (S2.requestOf('e1', S2.monthDates()[1]) !== 'must') throw new Error('希望が復元されない');
+  if (S2.submissionOf('e1').status !== 'submitted') throw new Error('提出済みにならない');
+});
+
 tryRun('対象月が違う提出コードは拒否される', () => {
   const b = bootStaffMode('?staff=e1', sb => { sb.Store.reset(); });
   const S = b.sb.Store;

@@ -24,6 +24,7 @@ var Rules = (function () {
     { id: 'OPS-004', cat: 'ops', name: '有資格者の配置', type: 'hard', params: {}, desc: '有資格者必須の勤務区分に有資格者を1名以上。' },
     { id: 'OPS-006', cat: 'ops', name: '新人だけの勤務にしない', type: 'hard', params: {}, desc: '新人には教育担当者を同じ勤務に同時配置する。' },
     { id: 'OPS-008', cat: 'ops', name: '担当可能な勤務区分', type: 'hard', params: {}, desc: '本人ができない勤務区分には入れない。' },
+    { id: 'OPS-A06', cat: 'ops', name: '同じ日に2つの勤務を入れない', type: 'hard', params: {}, desc: '1人が同じ日に複数の勤務区分へ重複して入らないようにする。' },
     { id: 'OPS-027', cat: 'ops', name: '勤務間インターバル', type: 'hard', weight: 0, params: { hours: 11 }, desc: '終業から次の始業まで一定時間を空ける。' },
     { id: 'OPS-030', cat: 'ops', name: '希望休の尊重', type: 'soft', weight: 8000, params: {}, desc: '「休み希望」の日は極力避ける（絶対休は別途ハード）。' },
     { id: 'OPS-031', cat: 'ops', name: '出勤希望の尊重', type: 'soft', weight: 3000, params: {}, desc: '「出たい」と申告した日を優先的に割り当てる。' },
@@ -194,8 +195,10 @@ var Rules = (function () {
     function ng(id, msg) { R.push({ ruleId: id, msg: msg }); }
 
     // 同日重複
-    if (ctx.shiftOf[empId][date]) { ng('OPS-035', '同じ日に既に別の勤務が入っています'); return R; }
-    if (slot.indexOf(empId) >= 0) { ng('OPS-035', '同じ枠に既にいます'); return R; }
+    if (ctx.shiftOf[empId][date]) {
+      ng('OPS-A06', '同じ日に既に別の勤務（' + (ctx.st[ctx.shiftOf[empId][date]] || {}).name + '）が入っています'); return R;
+    }
+    if (slot.indexOf(empId) >= 0) { ng('OPS-A06', '同じ枠に既にいます'); return R; }
 
     // 担当可能区分
     if (on(data, 'OPS-008') && (e.canShift || []).indexOf(stId) < 0)
@@ -243,7 +246,8 @@ var Rules = (function () {
     var weeklyCap = cfg(data, 'LAW-001').params.weekly;
     if (!data.settings.has36 || e.minor) {
       if (wmin > weeklyCap)
-        ng(e.minor ? 'LAW-041' : 'LAW-001', '週の法定労働時間(' + (weeklyCap / 60) + 'h)を超えます（この週 ' + U.min2h(wmin) + 'h）');
+        ng('LAW-001', '週の法定労働時間(' + (weeklyCap / 60) + 'h)を超えます（この週 ' + U.min2h(wmin) + 'h）'
+          + (e.minor ? '。18歳未満は36協定があっても超えられません' : ''));
     } else {
       var otCap = cfg(data, 'LAW-006').params.monthlyOt || 2700;
       var otAfter = monthlyOt(ctx, empId, wk, wmin, wot);
@@ -417,7 +421,7 @@ var Rules = (function () {
 
   /** 既に割り当て済みの1件を、いったん外してハード制約を全部かけ直す。
    *  日数・時間などの累積系は別途チェックするため、ここでは重複分を除く。 */
-  var CUMULATIVE = { 'OPS-035': 1, 'OPS-064': 1, 'OPS-042': 1, 'LAW-006': 1, 'LAW-001': 1, 'LAW-041': 1 };
+  var CUMULATIVE = { 'OPS-035': 1, 'OPS-064': 1, 'OPS-042': 1, 'LAW-006': 1, 'LAW-001': 1 };
   function recheck(ctx, date, stId, empId) {
     var arr = ctx.assign[date][stId];
     var idx = arr.indexOf(empId);
@@ -486,6 +490,10 @@ var Rules = (function () {
         push('soft', 'OPS-034', e.name + 'さん：最低' + e.minDays + '日に対し' + s.days + '日（' + (e.minDays - s.days) + '日不足）', '', '', e.id);
       if (e.maxDays > 0 && s.days > e.maxDays)
         push('hard', 'OPS-035', e.name + 'さん：最大' + e.maxDays + '日を超えて' + s.days + '日', '', '', e.id);
+      if (e.maxHoursMonth > 0 && s.minutes > e.maxHoursMonth * 60)
+        push('hard', 'OPS-035', e.name + 'さん：月間上限' + e.maxHoursMonth + '時間に対し' + U.min2h(s.minutes) + '時間', '', '', e.id);
+      if (e.maxNights > 0 && s.nights > e.maxNights)
+        push('hard', 'OPS-064', e.name + 'さん：月間夜勤上限' + e.maxNights + '回に対し' + s.nights + '回', '', '', e.id);
       if (e.incomeCap > 0) {
         var tot = (e.ytdEarnings || 0) + s.pay;
         if (tot > e.incomeCap) push('hard', 'OPS-042', e.name + 'さん：年収上限' + U.yen(e.incomeCap) + 'を超過（' + U.yen(tot) + '）', '', '', e.id);

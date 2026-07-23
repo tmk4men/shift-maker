@@ -141,6 +141,35 @@ var Store = (function () {
       st.breakMin = Math.max(0, Math.min(600, +st.breakMin || 0));
     });
 
+    // demand の入れ子まで型を保証する（demand:{} や byWeekday:null で落ちないように）
+    if (!d.demand || typeof d.demand !== 'object' || Array.isArray(d.demand)) d.demand = {};
+    ['byWeekday', 'roleReq', 'overrides', 'byWeekdayMax'].forEach(function (k) {
+      if (!d.demand[k] || typeof d.demand[k] !== 'object' || Array.isArray(d.demand[k])) d.demand[k] = {};
+    });
+    Object.keys(d.demand.roleReq).forEach(function (k) {
+      var v = d.demand.roleReq[k];
+      if (!v || typeof v !== 'object' || Array.isArray(v)) d.demand.roleReq[k] = { leader: false, certified: false };
+    });
+    Object.keys(d.demand.overrides).forEach(function (k) {
+      var v = d.demand.overrides[k];
+      if (!v || typeof v !== 'object' || Array.isArray(v)) delete d.demand.overrides[k];
+    });
+    ['requests', 'avail', 'submissions', 'carryover', 'assignments', 'prevMonth', 'ruleConfig'].forEach(function (k) {
+      if (!d[k] || typeof d[k] !== 'object' || Array.isArray(d[k])) d[k] = {};
+    });
+    [d.assignments, d.prevMonth].forEach(function (map) {
+      Object.keys(map).forEach(function (date) {
+        var day = map[date];
+        if (!day || typeof day !== 'object' || Array.isArray(day)) { delete map[date]; return; }
+        Object.keys(day).forEach(function (stId) { if (!Array.isArray(day[stId])) day[stId] = []; });
+      });
+    });
+    ['requests', 'avail'].forEach(function (k) {
+      Object.keys(d[k]).forEach(function (id) {
+        if (!d[k][id] || typeof d[k][id] !== 'object' || Array.isArray(d[k][id])) d[k][id] = {};
+      });
+    });
+
     var defEmp = base.employees[0];
     d.employees = d.employees.filter(function (e) { return e && typeof e === 'object'; });
     d.employees.forEach(function (e, i) {
