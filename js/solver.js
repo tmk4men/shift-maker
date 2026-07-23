@@ -10,7 +10,14 @@ var Solver = (function () {
 
   function generate(data) {
     var t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
-    var ctx = Rules.buildContext(data, {});          // 割当は空から
+    // 対象月ぶんだけ作り直し、他の月の割当はそのまま残す
+    // （残した分は連勤・夜勤明け・インターバルの判定と、公平性の繰り越しに使われる）
+    var prefix = data.settings.year + '-' + U.pad(data.settings.month);
+    var seed = {};
+    Object.keys(data.assignments || {}).forEach(function (date) {
+      if (String(date).indexOf(prefix) !== 0) seed[date] = U.clone(data.assignments[date]);
+    });
+    var ctx = Rules.buildContext(data, seed);
     var trace = {};                                   // trace[date][stId][empId] = 説明
     var log = [];
 
@@ -301,6 +308,11 @@ var Solver = (function () {
   function putTrace(trace, date, stId, empId, obj) {
     if (!trace[date]) trace[date] = {};
     if (!trace[date][stId]) trace[date][stId] = {};
+    // 保存容量を抑えるため、説明に使う分だけ残す（blocked は枠内で共有された配列なので複製を切る）
+    obj.why = (obj.why || []).filter(function (w) { return w.label; }).slice(0, 6);
+    obj.blocked = (obj.blocked || []).slice(0, 4).map(function (b) {
+      return { name: b.name, reason: b.reason, ruleId: b.ruleId };
+    });
     trace[date][stId][empId] = obj;
   }
 

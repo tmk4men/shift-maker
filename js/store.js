@@ -231,10 +231,27 @@ var Store = (function () {
     save();
   }
 
+  var saveErrorHandler = null;
+  function onSaveError(fn) { saveErrorHandler = fn; }
+
   function save() {
-    if (typeof localStorage === 'undefined') return;   // Node でのテスト実行時
-    try { localStorage.setItem(KEY, JSON.stringify(data)); }
-    catch (e) { console.warn('保存に失敗しました（容量超過の可能性）', e); }
+    if (typeof localStorage === 'undefined') return true;   // Node でのテスト実行時
+    try {
+      localStorage.setItem(KEY, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      // 容量超過など。説明用のデータ（trace）を捨ててもう一度試す
+      try {
+        if (data.lastResult) { data.lastResult.trace = {}; }
+        localStorage.setItem(KEY, JSON.stringify(data));
+        if (saveErrorHandler) saveErrorHandler('保存容量が不足したため、作成理由の記録だけ削除して保存しました');
+        return true;
+      } catch (e2) {
+        console.warn('保存に失敗しました', e2);
+        if (saveErrorHandler) saveErrorHandler('⚠ 保存できませんでした。［書き出し］でファイルに残してください');
+        return false;
+      }
+    }
   }
   /** テスト用：任意のデータを流し込む */
   function setData(d) { data = d; migrate(); return data; }
@@ -346,7 +363,7 @@ var Store = (function () {
     load: load, save: save, get: get, reset: reset, setData: setData,
     exportJson: exportJson, importJson: importJson, sampleData: sampleData,
     removeEmployee: removeEmployee, removeShiftType: removeShiftType,
-    exportSubmission: exportSubmission, importSubmission: importSubmission,
+    exportSubmission: exportSubmission, importSubmission: importSubmission, onSaveError: onSaveError,
     stCalc: stCalc, empById: empById, stById: stById, monthDates: monthDates,
     needOf: needOf, assignedOf: assignedOf, requestOf: requestOf,
     availOf: availOf, setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,

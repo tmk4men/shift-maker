@@ -32,6 +32,7 @@
     clearTimeout(t._tm); t._tm = setTimeout(function () { t.classList.add('hidden'); }, 2200);
   }
   function saveAndRender() { Store.save(); render(); }
+  Store.onSaveError(function (msg) { toast(msg); });
 
   function modal(title, bodyNode, footNodes) {
     document.getElementById('modalTitle').textContent = title;
@@ -633,23 +634,29 @@
     var dates = Store.monthDates();
     var res = D.lastResult;
 
-    var head = el('div', { class: 'row', style: 'margin-bottom:8px' }, [
+    var head = el('div', { class: 'row', style: 'margin-bottom:8px;align-items:center' }, [
+      el('button', { class: 'btn ghost sm', text: '◀ 前月', onclick: function () { moveMonth(-1); } }),
+      el('strong', { style: 'font-size:16px', text: D.settings.year + '年 ' + D.settings.month + '月' }),
+      el('button', { class: 'btn ghost sm', text: '翌月 ▶', onclick: function () { moveMonth(1); } }),
+      el('span', { style: 'width:12px' }),
       el('button', { class: 'btn big', text: '⚙ シフトを自動作成', onclick: doGenerate }),
       el('button', {
-        class: 'btn ghost', text: '空にする', onclick: function () {
-          if (!confirm('作成したシフトを消しますか？')) return;
-          D.assignments = {}; D.lastResult = null; saveAndRender();
+        class: 'btn ghost', text: 'この月を空にする', onclick: function () {
+          if (!confirm(D.settings.month + '月のシフトを消します。よろしいですか？（他の月は残ります）')) return;
+          var prefix = D.settings.year + '-' + U.pad(D.settings.month);
+          Object.keys(D.assignments).forEach(function (dt) { if (dt.indexOf(prefix) === 0) delete D.assignments[dt]; });
+          D.lastResult = null; saveAndRender();
         }
       }),
-      el('button', { class: 'btn ghost', text: 'CSV出力', onclick: exportCsv }),
-      el('button', {
-        class: 'btn ghost', text: '前月として保存', onclick: function () {
-          D.prevMonth = U.clone(D.assignments); Store.save();
-          toast('現在のシフトを「前月分」として記録しました（月跨ぎの連勤判定に使われます）');
-        }
-      })
+      el('button', { class: 'btn ghost', text: 'CSV出力', onclick: exportCsv })
     ]);
     p.appendChild(head);
+
+    var prevPrefix = U.addDays(D.settings.year + '-' + U.pad(D.settings.month) + '-01', -1).slice(0, 7);
+    var hasPrev = Object.keys(D.assignments).some(function (dt) { return dt.indexOf(prevPrefix) === 0; });
+    p.appendChild(el('p', { class: 'hint', style: 'margin:-4px 0 10px', text: hasPrev
+      ? '前月（' + prevPrefix + '）のシフトも保存されています。月をまたぐ連勤・夜勤明け・夜勤/土日の公平性に自動で反映されます。'
+      : '前月のシフトがまだありません。前月を作っておくと、月をまたぐ連勤や夜勤の偏りも調整されます。' }));
 
     /* 作成前チェック：作る前に分かる問題を先に出す */
     var pre = preflight();
@@ -896,6 +903,15 @@
     }
     var rv = Solver.revalidate(D, D.assignments);
     if (D.lastResult) { D.lastResult.violations = rv.violations; D.lastResult.stats = rv.stats; D.lastResult.totalPay = rv.totalPay; }
+    saveAndRender();
+  }
+
+  function moveMonth(delta) {
+    var m = D.settings.month + delta, y = D.settings.year;
+    if (m < 1) { m = 12; y--; }
+    if (m > 12) { m = 1; y++; }
+    D.settings.year = y; D.settings.month = m;
+    D.lastResult = null;
     saveAndRender();
   }
 

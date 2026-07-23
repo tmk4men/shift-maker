@@ -81,28 +81,45 @@ var Rules = (function () {
       assign: assignments || {},
       st: {},           // stId -> calc
       emp: {},          // empId -> employee
-      shiftOf: {},      // empId -> { date: stId }（前月含む）
-      stats: {}         // empId -> {days, minutes, nights, weekends, pay, dates:[]}
+      shiftOf: {},      // empId -> { date: stId }（前後の月も含む）
+      stats: {},        // empId -> {days, minutes, nights, weekends, pay, dates:[]}（対象月だけ集計）
+      carry: {}         // empId -> {nights, weekends}（前月の実績。公平性の繰り越しに使う）
     };
     data.shiftTypes.forEach(function (s) { ctx.st[s.id] = Object.assign({}, s, Store.stCalc(s)); });
     data.employees.forEach(function (e) {
       ctx.emp[e.id] = e;
       ctx.shiftOf[e.id] = {};
       ctx.stats[e.id] = { days: 0, minutes: 0, nightMin: 0, nights: 0, weekends: 0, pay: 0, dates: [], week: {}, weekOt: {} };
+      ctx.carry[e.id] = { nights: 0, weekends: 0 };
     });
-    // 前月分（月跨ぎの連勤・インターバル判定用）
-    applyMap(ctx, data.prevMonth || {}, false);
-    applyMap(ctx, ctx.assign, true);
+
+    var prefix = data.settings.year + '-' + U.pad(data.settings.month);
+    var prevPrefix = U.addDays(prefix + '-01', -1).slice(0, 7);
+
+    // 対象月のものだけ集計し、それ以外の月は「履歴」としてだけ反映する
+    // （連勤・夜勤明け・インターバルの判定に使うが、今月の日数や賃金には数えない）
+    var inMonth = {}, outMonth = {};
+    Object.keys(ctx.assign).forEach(function (date) {
+      (String(date).indexOf(prefix) === 0 ? inMonth : outMonth)[date] = ctx.assign[date];
+    });
+    applyMap(ctx, data.prevMonth || {}, false, prevPrefix, ctx.carry);
+    applyMap(ctx, outMonth, false, prevPrefix, ctx.carry);
+    applyMap(ctx, inMonth, true);
     return ctx;
   }
 
-  function applyMap(ctx, map, counting) {
+  function applyMap(ctx, map, counting, carryPrefix, carry) {
     Object.keys(map).forEach(function (date) {
       Object.keys(map[date] || {}).forEach(function (stId) {
         (map[date][stId] || []).forEach(function (empId) {
           if (!ctx.emp[empId] || !ctx.st[stId]) return;
           ctx.shiftOf[empId][date] = stId;
           if (counting) addStat(ctx, empId, date, stId, 1);
+          // 前月の夜勤・土日祝の回数を数えておく（今月の公平性の出発点にする）
+          else if (carry && carryPrefix && String(date).indexOf(carryPrefix) === 0) {
+            if (ctx.st[stId].night > 0) carry[empId].nights++;
+            if (Store.isWeekendOrHoliday(date)) carry[empId].weekends++;
+          }
         });
       });
     });
@@ -149,6 +166,17 @@ var Rules = (function () {
     var otMin = Math.max(0, c.work - 480);
     var otAdd = emp.wage * 0.25 * (otMin / 60);
     return base + nightAdd + otAdd;
+  }
+
+  /** 公平性の繰り越し：手入力があればそれを、なければ前月の実績を使う */
+  function carryOf(ctx, empId) {
+    var manual = (ctx.data.carryover || {})[empId];
+    var auto = (ctx.carry || {})[empId] || { nights: 0, weekends: 0 };
+    if (!manual) return auto;
+    return {
+      nights: manual.nights === undefined ? auto.nights : +manual.nights || 0,
+      weekends: manual.weekends === undefined ? auto.weekends : +manual.weekends || 0
+    };
   }
 
   function assignedAt(ctx, date, stId) {
@@ -365,7 +393,7 @@ var Rules = (function () {
 
     // 夜勤の公平（回数が増えるほど急に不利になるので偏りにくい）
     if (c.night > 0) {
-      var co = (data.carryover[empId] || {}).nights || 0;
+      var co = carryOf(ctx, empId).nights;
       var n = s.nights + co;
       add(n * (n + 1) / 2 * cfg(data, 'OPS-080').weight, 'OPS-080', '今月の夜勤 ' + s.nights + '回');
     }
@@ -376,7 +404,7 @@ var Rules = (function () {
     if (e.certified && !rr.certified) add(reserve * 0.6, 'OPS-A04', '有資格者は他の枠のために温存');
     // 土日祝の公平
     if (Store.isWeekendOrHoliday(date)) {
-      var cw = (data.carryover[empId] || {}).weekends || 0;
+      var cw = carryOf(ctx, empId).weekends;
       add((s.weekends + cw) * cfg(data, 'OPS-081').weight, 'OPS-081', '今月の土日祝 ' + s.weekends + '回');
     }
     // 月内のペース配分（前半で枠を使い切って後半が空になるのを防ぐ）
@@ -540,7 +568,7 @@ var Rules = (function () {
     buildContext: buildContext, hardCheck: hardCheck, score: score, validate: validate,
     doAssign: doAssign, undoAssign: undoAssign, assignedAt: assignedAt,
     payOf: payOf, runLength: runLength, weekKey: weekKey, isTrainerFor: isTrainerFor,
-    monthlyOt: monthlyOt
+    monthlyOt: monthlyOt, carryOf: carryOf
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
