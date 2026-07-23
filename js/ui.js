@@ -64,11 +64,11 @@
   /** ロックされていれば PIN を聞き、通ったら then() を実行する */
   function requireUnlock(then) {
     if (!locked()) { then(); return; }
-    var msg = el('p', { class: 'hint', text: '管理用のPIN（4桁）を入力してください。' });
-    var inp = input('password', '', null, { inputmode: 'numeric', maxlength: 8, style: 'font-size:24px;letter-spacing:.4em;text-align:center;width:160px' });
+    var msg = el('p', { class: 'hint', text: '管理用のパスワードを入力してください。' });
+    var inp = input('password', '', null, { maxlength: 16, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', style: 'font-size:20px;letter-spacing:.2em;text-align:center;width:220px' });
     function submit() {
       if (Store.tryUnlock(inp.value)) { closeModal(); D = Store.get(); then(); }
-      else { msg.textContent = 'PINが違います。'; inp.value = ''; }
+      else { msg.textContent = 'パスワードが違います。'; inp.value = ''; }
     }
     inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
     modal('管理画面のロック', el('div', {}, [msg, el('div', { class: 'row' }, [inp])]), [
@@ -164,7 +164,7 @@
     /* データの保存場所についての注意（消えると困るので最初に伝える） */
     p.appendChild(el('div', { class: 'violation', style: 'margin-bottom:16px' }, [
       el('div', { class: 'vt', text: 'データはこの端末にのみ保存されます' }),
-      el('div', { class: 'vd', text: 'アプリのデータを消すと失われます。右上の［書き出し］でファイルに残せます。' })
+      el('div', { class: 'vd', text: '右上の［書き出し］でバックアップできます。' })
     ]));
 
     p.appendChild(card('店舗・対象月', null, [
@@ -290,36 +290,34 @@
     p.appendChild(card('管理画面のロック',
       '共用のタブレットやPCで使うとき、スタッフに設定を触られないようにします。', [
       el('div', { class: 'row' }, [
-        el('span', { class: 'badge ' + (Store.hasPin() ? 'ok' : 'warn'), text: Store.hasPin() ? 'PIN設定済み' : 'ロックなし' }),
+        el('span', { class: 'badge ' + (Store.hasPin() ? 'ok' : 'warn'), text: Store.hasPin() ? 'パスワード設定済み' : 'ロックなし' }),
         Store.hasPin() ? el('button', {
           class: 'btn ghost', text: 'いますぐロックする', onclick: function () {
             Store.lockNow(); switchTab('shift'); toast('ロックしました');
           }
         }) : null,
         el('button', {
-          class: 'btn ' + (Store.hasPin() ? 'ghost' : ''), text: Store.hasPin() ? 'PINを変更する' : 'PINを設定する',
+          class: 'btn ' + (Store.hasPin() ? 'ghost' : ''), text: Store.hasPin() ? 'パスワードを変更する' : 'パスワードを設定する',
           onclick: function () {
-            var i1 = input('password', '', null, { inputmode: 'numeric', maxlength: 8, style: 'font-size:20px;letter-spacing:.3em;text-align:center;width:150px' });
-            var i2 = input('password', '', null, { inputmode: 'numeric', maxlength: 8, style: 'font-size:20px;letter-spacing:.3em;text-align:center;width:150px' });
-            var msg = el('p', { class: 'hint', text: '4桁以上の数字を決めてください。' });
-            modal('PINの設定', el('div', {}, [
+            var i1 = input('password', '', null, { maxlength: 16, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', style: 'font-size:18px;letter-spacing:.2em;text-align:center;width:200px' });
+            var i2 = input('password', '', null, { maxlength: 16, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', style: 'font-size:18px;letter-spacing:.2em;text-align:center;width:200px' });
+            var msg = el('p', { class: 'hint', text: '4〜16文字の英数字で決めてください（大文字と小文字は区別します）。' });
+            modal('管理画面のパスワード', el('div', {}, [
               msg,
-              el('div', { class: 'row' }, [field('新しいPIN', i1), field('もう一度', i2)]),
+              el('div', { class: 'row' }, [field('新しいパスワード', i1), field('もう一度', i2)]),
               el('div', { class: 'violation hard', style: 'margin-top:16px' }, [
-                el('div', { class: 'vt', text: 'PINを忘れると管理画面を開けなくなります' }),
-                el('div', { class: 'vd', text: '設定する前に、右上の［書き出し］でデータをファイルに保存しておいてください。忘れた場合はアプリのデータを消してから、そのファイルを読み込み直すことになります。' })
-              ]),
-              el('div', { class: 'violation', style: 'margin-top:8px' }, [
-                el('div', { class: 'vt', text: 'これは本物の鍵ではありません' }),
-                el('div', { class: 'vd', text: 'すべてこの端末の中で動くため、詳しい人には突破できます。誤って設定を触られるのを防ぐための蓋です。共用端末では、iPadの「アクセスガイド」やAndroidの「画面のピン留め」を併用すると確実です。' })
+                el('div', { class: 'vt', text: '忘れると管理画面を開けなくなります' }),
+                el('div', { class: 'vd', text: '設定前に［書き出し］でバックアップを。' })
               ])
             ]), [
               el('button', {
                 class: 'btn', text: '設定する', onclick: function () {
-                  if (!/^\d{4,8}$/.test(i1.value)) { msg.textContent = '4〜8桁の数字で入れてください。'; return; }
+                  if (!/^[0-9A-Za-z_-]{4,16}$/.test(i1.value)) {
+                    msg.textContent = '4〜16文字の英数字（- と _ も可）で入れてください。'; return;
+                  }
                   if (i1.value !== i2.value) { msg.textContent = '2つの入力が一致しません。'; return; }
                   Store.setPin(i1.value); closeModal(); D = Store.get(); render();
-                  toast('PINを設定しました');
+                  toast('パスワードを設定しました');
                 }
               }),
               el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
@@ -327,14 +325,14 @@
           }
         }),
         Store.hasPin() ? el('button', {
-          class: 'btn ghost danger', text: 'PINを解除する', onclick: function () {
-            if (!confirm('PINを解除します。誰でも設定を変更できる状態になります。よろしいですか？')) return;
-            Store.setPin(''); D = Store.get(); render(); toast('PINを解除しました');
+          class: 'btn ghost danger', text: 'パスワードを解除する', onclick: function () {
+            if (!confirm('パスワードを解除します。誰でも設定を変更できる状態になります。よろしいですか？')) return;
+            Store.setPin(''); D = Store.get(); render(); toast('パスワードを解除しました');
           }
         }) : null
       ]),
       el('p', { class: 'hint', style: 'margin:12px 0 0', text:
-        'ロック中は［① 基本設定］［② 従業員］［⑥ ルール設定］と、読み込み・初期化が開けなくなります。シフト表と集計は見られます。アプリを閉じると再びロックされます。' })
+        'ロック中は ①基本設定・②従業員・⑥ルール設定 が開けません。シフト表と集計は見られます。' })
     ]));
 
     /* 特定日の調整 */
@@ -458,10 +456,9 @@
     ]));
 
     b.appendChild(el('p', { class: 'hint', style: 'margin-top:6px', text:
-      '※「最低出勤日数」「月間の最低時間」は契約で保障している下限です。届かない場合は不足として報告します（休業手当の検討が必要になるため）。' }));
+      '※ 最低日数・最低時間は契約で保障している下限。届かない場合は不足として報告します。' }));
     b.appendChild(el('p', { class: 'hint', text:
-      '※「週の上限時間」は社会保険に入りたくない人の調整に使います。2026年10月から月額8.8万円（106万円）の要件が撤廃され、'
-      + '週20時間以上が加入の分かれ目になるため、その場合は 19 などを設定してください。' }));
+      '※ 週の上限時間は社会保険の調整用。2026年10月から週20時間以上が加入の分かれ目になります。' }));
 
     b.appendChild(el('h4', { text: '年収の壁（扶養内で働きたい人）', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, [
@@ -592,7 +589,7 @@
     var b = el('div', {}, [
       el('p', { class: 'hint', text: 'このURLを開くと、' + e.name + ' さんの希望提出画面だけが表示されます（管理用の設定は出ません）。' }),
       ta,
-      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ データはこの端末にだけ保存されます。別の端末とは共有されません。スタッフのスマホで入力してもらう場合は［スタッフ用の入力ページ］を使ってください。' })
+      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ 別の端末とはデータを共有しません。スタッフのスマホで入力してもらう場合は［スタッフ用の入力ページ］を使ってください。' })
     ]);
     modal('スタッフ用リンク', b, [
       el('button', {
@@ -616,11 +613,7 @@
     var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:60px;font-family:monospace;font-size:12px' });
     ta.value = url;
     modal('スタッフ用の入力ページ', el('div', {}, [
-      el('p', {}, [el('strong', { text: '使い方' })]),
-      el('p', { class: 'hint', text: '1. このURLをスタッフに送る（LINEなど）' }),
-      el('p', { class: 'hint', text: '2. スタッフは名前と、行ける日・時間を入力して［ファイルに保存］' }),
-      el('p', { class: 'hint', text: '3. できたファイルを店長に送り返してもらう' }),
-      el('p', { class: 'hint', text: '4. この画面の［希望ファイルを読み込む］でまとめて取り込む（何人分でも一度に選べます）' }),
+      el('p', { class: 'hint', text: 'このURLをスタッフに送ると、名前と行ける日時を入力してファイルを作れます。それを［希望ファイルを読み込む］で取り込みます（何人分でも一度に）。' }),
       ta
     ]), [
       el('button', {
@@ -1651,7 +1644,7 @@
         el('button', { class: 'btn big', text: 'ファイルに保存する', onclick: saveInputFile }),
         el('button', { class: 'btn ghost', text: 'コードでコピーする', onclick: copyInputCode })
       ]),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: '保存したファイル（またはコピーしたコード）を責任者に送ってください。入力内容はこの端末に残るので、閉じても続きから入力できます。' })
+      el('p', { class: 'hint', style: 'margin-top:8px', text: '保存したファイルを責任者に送ってください。入力内容は残るので、閉じても続きからできます。' })
     ]));
   }
 
