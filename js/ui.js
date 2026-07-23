@@ -648,7 +648,12 @@
           D.lastResult = null; saveAndRender();
         }
       }),
-      el('button', { class: 'btn ghost', text: 'CSV出力', onclick: exportCsv })
+      el('button', { class: 'btn ghost', text: 'CSV出力', onclick: exportCsv }),
+      el('button', {
+        class: 'btn ghost', text: '印刷', onclick: function () {
+          if (typeof window !== 'undefined' && window.print) window.print();
+        }
+      })
     ]);
     p.appendChild(head);
 
