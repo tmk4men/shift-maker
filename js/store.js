@@ -35,7 +35,8 @@ var Store = (function () {
         leader: false, certified: false, trainer: false, newbie: false, minor: false,
         canShift: shiftTypes.map(function (s) { return s.id; }),
         ngWeekdays: [], priority: 0,
-        minDays: 0, maxDays: 22, maxConsecutive: 5, maxHoursMonth: 0, maxNights: 0, weeklyHoursCap: 0,
+        minDays: 0, maxDays: 22, minHoursMonth: 0, maxHoursMonth: 0,
+        maxConsecutive: 5, maxNights: 0, weeklyHoursCap: 0,
         ngPartners: [], goodPartners: [], trainerId: '',
         incomeCap: 0, ytdEarnings: 0, note: ''
       }, o);
@@ -71,8 +72,10 @@ var Store = (function () {
       settings: {
         storeName: 'サンプル店',
         year: y, month: m,
-        weekStartsOn: 0,        // 週の始まり 0=日曜 1=月曜（ここだけは設定できる）
-        budget: 0               // 月間人件費予算（0=無制限）
+        weekStartsOn: 0,        // 週の始まり 0=日曜 1=月曜
+        budget: 0,              // 月間人件費予算（0=無制限）
+        closedWeekdays: [],     // 定休日の曜日 [0=日 … 6=土]
+        closedDates: []         // 臨時休業日 'YYYY-MM-DD'
       },
       // 祝日は自動計算（util.jpHolidays）。未提出日は出勤させない。
       // 必要人数を超える配置はしない。この3つは設定にせず固定。
@@ -159,6 +162,8 @@ var Store = (function () {
     var s = d.settings;
     if (!(s.year >= 1970 && s.year <= 3000)) s.year = base.settings.year;
     if (!(s.month >= 1 && s.month <= 12)) s.month = base.settings.month;
+    if (!Array.isArray(s.closedWeekdays)) s.closedWeekdays = [];
+    if (!Array.isArray(s.closedDates)) s.closedDates = [];
 
     if (!d.shiftTypes.length) d.shiftTypes = U.clone(base.shiftTypes);
     d.shiftTypes.forEach(function (st, i) {
@@ -208,7 +213,7 @@ var Store = (function () {
       if (!e.id) e.id = U.uid('e');
       if (!e.name) e.name = '従業員' + (i + 1);
       e.wage = Math.max(0, +e.wage || 0);
-      ['minDays', 'maxDays', 'maxConsecutive', 'maxHoursMonth', 'maxNights', 'weeklyHoursCap', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
+      ['minDays', 'maxDays', 'minHoursMonth', 'maxHoursMonth', 'maxConsecutive', 'maxNights', 'weeklyHoursCap', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
         e[k] = Math.max(0, +e[k] || 0);
       });
       e.priority = Math.max(-3, Math.min(3, +e.priority || 0));
@@ -360,7 +365,7 @@ var Store = (function () {
     e.name = name || '新しい従業員';
     e.leader = false; e.certified = false; e.trainer = false; e.newbie = false; e.minor = false;
     e.priority = 0; e.minDays = 0; e.maxDays = 20; e.maxConsecutive = 5;
-    e.maxHoursMonth = 0; e.maxNights = 0; e.weeklyHoursCap = 0;
+    e.minHoursMonth = 0; e.maxHoursMonth = 0; e.maxNights = 0; e.weeklyHoursCap = 0;
     e.incomeCap = 0; e.ytdEarnings = 0; e.note = '';
     e.ngPartners = []; e.goodPartners = []; e.trainerId = ''; e.ngWeekdays = [];
     e.canShift = d.shiftTypes.map(function (s) { return s.id; });
@@ -394,8 +399,16 @@ var Store = (function () {
   function monthDates() {
     return U.monthDates(get().settings.year, get().settings.month);
   }
-  /** その日・その勤務区分の必要人数 */
+  /** お店が休みの日か（定休日 or 臨時休業日） */
+  function isClosed(date) {
+    var s = get().settings;
+    if ((s.closedDates || []).indexOf(date) >= 0) return true;
+    return (s.closedWeekdays || []).indexOf(U.weekdayOf(date)) >= 0;
+  }
+
+  /** その日・その勤務区分の必要人数（休業日は0人） */
   function needOf(date, stId) {
+    if (isClosed(date)) return 0;
     var d = get().demand;
     var ov = d.overrides[date];
     if (ov && ov[stId] !== undefined && ov[stId] !== null && ov[stId] !== '') return +ov[stId];
@@ -460,7 +473,8 @@ var Store = (function () {
     stCalc: stCalc, empById: empById, stById: stById, monthDates: monthDates,
     needOf: needOf, assignedOf: assignedOf, requestOf: requestOf,
     availOf: availOf, setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,
-    isHoliday: isHoliday, holidayName: holidayName, isWeekendOrHoliday: isWeekendOrHoliday
+    isHoliday: isHoliday, holidayName: holidayName, isWeekendOrHoliday: isWeekendOrHoliday,
+    isClosed: isClosed
   };
 })();
 

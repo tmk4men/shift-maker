@@ -20,6 +20,7 @@ var Rules = (function () {
 
     // ---- 運用（設定変更可） ----
     { id: 'OPS-001', cat: 'ops', name: '必要人数の充足', type: 'hard', params: {}, desc: '各日・各勤務区分の必要人数を満たす。' },
+    { id: 'OPS-A09', cat: 'ops', name: 'お店の休みの日', type: 'hard', params: {}, desc: '定休日・臨時休業日には誰も出勤させない。' },
     { id: 'OPS-003', cat: 'ops', name: '責任者の配置', type: 'hard', params: {}, desc: '責任者必須の勤務区分に責任者を1名以上。' },
     { id: 'OPS-004', cat: 'ops', name: '有資格者の配置', type: 'hard', params: {}, desc: '有資格者必須の勤務区分に有資格者を1名以上。' },
     { id: 'OPS-006', cat: 'ops', name: '新人だけの勤務にしない', type: 'hard', params: {}, desc: '新人には教育担当者を同じ勤務に同時配置する。' },
@@ -30,7 +31,7 @@ var Rules = (function () {
     { id: 'OPS-031', cat: 'ops', name: '出勤希望の尊重', type: 'soft', weight: 3000, params: {}, desc: '「出たい」と申告した日を優先的に割り当てる。' },
     { id: 'OPS-032', cat: 'ops', name: '勤務不可の曜日', type: 'hard', params: {}, desc: '通学・ダブルワーク等で出勤できない曜日を除外。' },
     { id: 'OPS-033', cat: 'ops', name: '本人が提出した勤務可能時間', type: 'hard', params: {}, desc: 'スタッフが提出した「この日は何時から何時まで行けます」の範囲内にだけ割り当てる。' },
-    { id: 'OPS-034', cat: 'ops', name: '最低出勤日数', type: 'soft', weight: 500, params: {}, desc: '契約上の最低日数に達するよう優先的に割り当てる。' },
+    { id: 'OPS-034', cat: 'ops', name: '最低出勤日数・最低勤務時間', type: 'soft', weight: 500, params: {}, desc: '契約で保障している最低日数・最低時間に届くよう優先的に割り当てる。届かない場合は不足として報告する（休業手当の検討が必要になるため）。' },
     { id: 'OPS-035', cat: 'ops', name: '最大出勤日数・上限時間', type: 'hard', params: {}, desc: '本人ごとの上限日数・上限時間を超えない。' },
     { id: 'OPS-036', cat: 'ops', name: '最大連勤日数', type: 'hard', params: {}, desc: '本人ごとの連勤上限を超えない。' },
     { id: 'OPS-042', cat: 'ops', name: '年収の壁（扶養）', type: 'hard', weight: 1500, params: {}, desc: '年間上限額を超える割当を禁止し、使い切りペースを平準化する。' },
@@ -223,6 +224,9 @@ var Rules = (function () {
     var R = [];
     function ng(id, msg) { R.push({ ruleId: id, msg: msg }); }
 
+    // お店の休み
+    if (Store.isClosed(date)) { ng('OPS-A09', 'この日はお店が休みです'); return R; }
+
     // 同日重複
     if (ctx.shiftOf[empId][date]) {
       ng('OPS-A06', '同じ日に既に別の勤務（' + (ctx.st[ctx.shiftOf[empId][date]] || {}).name + '）が入っています'); return R;
@@ -385,8 +389,13 @@ var Rules = (function () {
       (e.priority > 0 ? '多めに入れたい設定' : e.priority < 0 ? '控えめにする設定' : ''));
 
     // 最低日数の未達を優先的に埋める
-    var lack = Math.max(0, (e.minDays || 0) - s.days);
-    add(-lack * cfg(data, 'OPS-034').weight, 'OPS-034', lack > 0 ? '最低日数まであと' + lack + '日' : '');
+    var lackDays = Math.max(0, (e.minDays || 0) - s.days);
+    var lackMin = Math.max(0, (e.minHoursMonth || 0) * 60 - s.minutes);
+    var lackW = cfg(data, 'OPS-034').weight;
+    add(-lackDays * lackW, 'OPS-034', lackDays > 0 ? '最低日数まであと' + lackDays + '日' : '');
+    // 時間の不足は「あと何回入れば埋まるか」に換算して同じ重みで効かせる
+    add(-(lackMin / Math.max(c.work, 1)) * lackW, 'OPS-034',
+      lackMin > 0 ? '最低時間まであと' + U.min2h(lackMin) + '時間' : '');
 
     // 勤務時間の均等化（上限に対する消化率）
     var capMin = (e.maxHoursMonth > 0 ? e.maxHoursMonth * 60 : (e.maxDays || 20) * 480) || 1;
@@ -484,6 +493,17 @@ var Rules = (function () {
 
     // 同じ日に2つ以上の勤務が入っていないか
     // （recheck では片方を外してから判定するため、ここで別に見る必要がある）
+    // 休業日に人が入っていないか
+    dates.forEach(function (date) {
+      if (!Store.isClosed(date)) return;
+      data.shiftTypes.forEach(function (st) {
+        assignedAt(ctx, date, st.id).forEach(function (id) {
+          var e = ctx.emp[id];
+          push('hard', 'OPS-A09', date + '：お店が休みの日に ' + (e ? e.name : id) + 'さんの勤務が入っています', date, st.id, id);
+        });
+      });
+    });
+
     dates.forEach(function (date) {
       var seen = {};
       data.shiftTypes.forEach(function (st) {
@@ -532,7 +552,10 @@ var Rules = (function () {
     data.employees.forEach(function (e) {
       var s = ctx.stats[e.id];
       if (e.minDays > 0 && s.days < e.minDays)
-        push('soft', 'OPS-034', e.name + 'さん：最低' + e.minDays + '日に対し' + s.days + '日（' + (e.minDays - s.days) + '日不足）', '', '', e.id);
+        push('soft', 'OPS-034', e.name + 'さん：契約の最低' + e.minDays + '日に対し' + s.days + '日（' + (e.minDays - s.days) + '日不足）', '', '', e.id);
+      if (e.minHoursMonth > 0 && s.minutes < e.minHoursMonth * 60)
+        push('soft', 'OPS-034', e.name + 'さん：契約の最低' + e.minHoursMonth + '時間に対し' + U.min2h(s.minutes)
+          + '時間（' + U.min2h(e.minHoursMonth * 60 - s.minutes) + '時間不足）', '', '', e.id);
       if (e.maxDays > 0 && s.days > e.maxDays)
         push('hard', 'OPS-035', e.name + 'さん：最大' + e.maxDays + '日を超えて' + s.days + '日', '', '', e.id);
       if (e.maxHoursMonth > 0 && s.minutes > e.maxHoursMonth * 60)

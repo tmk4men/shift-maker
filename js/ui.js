@@ -147,6 +147,49 @@
         '祝日は自動判定します。希望が入力されていない日は出勤させません。必要人数を超える配置もしません。' })
     ]));
 
+    /* お店の休み */
+    var closedCard = card('お店の休み', '休みの日には誰も出勤させません。必要人数の設定より優先されます。', [
+      el('div', { class: 'field' }, [el('label', { text: '定休日（毎週この曜日は休み）' }),
+      el('div', { class: 'row' }, U.WD.map(function (w, i) {
+        return checkbox(w + '曜', (s.closedWeekdays || []).indexOf(i) >= 0, function (e) {
+          if (e.target.checked) { if (s.closedWeekdays.indexOf(i) < 0) s.closedWeekdays.push(i); }
+          else s.closedWeekdays = s.closedWeekdays.filter(function (x) { return x !== i; });
+          saveAndRender();
+        });
+      }))]),
+      el('div', { class: 'field', style: 'margin-top:16px' }, [el('label', { text: '臨時休業日（年末年始・棚卸しなど）' }),
+      el('div', { class: 'row' }, [
+        (function () {
+          var di = input('date', '', null);
+          return el('div', { class: 'row' }, [di, el('button', {
+            class: 'btn sm', text: '追加', onclick: function () {
+              var v = di.value;
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return toast('日付を選んでください');
+              if (s.closedDates.indexOf(v) < 0) s.closedDates.push(v);
+              s.closedDates.sort();
+              saveAndRender();
+            }
+          })]);
+        })()
+      ])]),
+      el('div', { class: 'row', style: 'margin-top:12px' },
+        (s.closedDates || []).length
+          ? s.closedDates.map(function (d) {
+            return el('span', { class: 'chip' }, [
+              d + '（' + U.WD[U.weekdayOf(d)] + '）',
+              el('button', {
+                class: 'btn ghost sm', style: 'margin-left:6px;min-height:24px;padding:0 8px',
+                text: '✕', onclick: function () {
+                  s.closedDates = s.closedDates.filter(function (x) { return x !== d; });
+                  saveAndRender();
+                }
+              })
+            ]);
+          })
+          : [el('span', { class: 'muted', text: '登録なし' })])
+    ]);
+    p.appendChild(closedCard);
+
     /* 勤務区分 */
     var stRows = D.shiftTypes.map(function (st, i) {
       var c = Store.stCalc(st);
@@ -321,7 +364,8 @@
       field('最低出勤日数', input('number', e.minDays, function (ev) { e.minDays = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('最大出勤日数', input('number', e.maxDays, function (ev) { e.maxDays = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('連勤上限', input('number', e.maxConsecutive, function (ev) { e.maxConsecutive = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
-      field('月間上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
+      field('月間の最低時間(0=なし)', input('number', e.minHoursMonth, function (ev) { e.minHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
+      field('月間の上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月間夜勤上限(0=なし)', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('週の上限時間(0=なし)', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
       field('優遇度 -3〜+3', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
@@ -330,6 +374,8 @@
     ]));
 
     b.appendChild(el('p', { class: 'hint', style: 'margin-top:6px', text:
+      '※「最低出勤日数」「月間の最低時間」は契約で保障している下限です。届かない場合は不足として報告します（休業手当の検討が必要になるため）。' }));
+    b.appendChild(el('p', { class: 'hint', text:
       '※「週の上限時間」は社会保険に入りたくない人の調整に使います。2026年10月から月額8.8万円（106万円）の要件が撤廃され、'
       + '週20時間以上が加入の分かれ目になるため、その場合は 19 などを設定してください。' }));
 

@@ -261,23 +261,35 @@ var Solver = (function () {
     return true;
   }
 
-  /* 最低出勤日数に届いていない人を、上限人数に余裕がある枠へ追加する */
+  /** その人が契約の最低（日数・時間）に届いていないか */
+  function belowMinimum(ctx, e) {
+    var s = ctx.stats[e.id];
+    if (e.minDays > 0 && s.days < e.minDays) return true;
+    if (e.minHoursMonth > 0 && s.minutes < e.minHoursMonth * 60) return true;
+    return false;
+  }
+  /** あとどれくらい足りないか（並べ替え用の目安） */
+  function shortfall(ctx, e) {
+    var s = ctx.stats[e.id];
+    return Math.max(0, (e.minDays || 0) - s.days)
+      + Math.max(0, ((e.minHoursMonth || 0) * 60 - s.minutes) / 480);
+  }
+
+  /* 契約の最低日数・最低時間に届いていない人を、空きのある枠へ追加する */
   function fillMinDays(ctx, trace, log) {
     var data = ctx.data;
-    var lacking = data.employees.filter(function (e) {
-      return e.minDays > 0 && ctx.stats[e.id].days < e.minDays;
-    });
+    var lacking = data.employees.filter(function (e) { return belowMinimum(ctx, e); });
     if (!lacking.length) return;
 
     lacking.sort(function (a, b) {
-      var la = a.minDays - ctx.stats[a.id].days, lb = b.minDays - ctx.stats[b.id].days;
+      var la = shortfall(ctx, a), lb = shortfall(ctx, b);
       if (la !== lb) return lb - la;
       return a.id < b.id ? -1 : 1;
     });
 
     lacking.forEach(function (e) {
       var guard = 0;
-      while (ctx.stats[e.id].days < e.minDays && guard++ < 40) {
+      while (belowMinimum(ctx, e) && guard++ < 40) {
         var bestSlot = null, bestScore = Infinity;
         Store.monthDates().forEach(function (date) {
           data.shiftTypes.forEach(function (st) {
@@ -292,13 +304,18 @@ var Solver = (function () {
           });
         });
         if (!bestSlot) {
-          log.push(e.name + 'さん：最低日数' + e.minDays + '日に対し' + ctx.stats[e.id].days + '日。これ以上入れられる枠がありません');
+          var st2 = ctx.stats[e.id];
+          log.push(e.name + 'さん：契約の最低（'
+            + (e.minDays > 0 ? e.minDays + '日' : '')
+            + (e.minDays > 0 && e.minHoursMonth > 0 ? '・' : '')
+            + (e.minHoursMonth > 0 ? e.minHoursMonth + '時間' : '')
+            + '）に対し ' + st2.days + '日 / ' + U.min2h(st2.minutes) + '時間。これ以上入れられる枠がありません');
           break;
         }
         Rules.doAssign(ctx, bestSlot.date, bestSlot.stId, e.id);
         putTrace(trace, bestSlot.date, bestSlot.stId, e.id, {
           score: Math.round(bestScore),
-          why: [{ v: 0, id: 'OPS-034', label: '最低出勤日数(' + e.minDays + '日)を満たすため追加' }],
+          why: [{ v: 0, id: 'OPS-034', label: '契約の最低日数・最低時間を満たすため追加' }],
           alternatives: [], blocked: []
         });
       }
