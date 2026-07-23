@@ -71,7 +71,16 @@
       else { msg.textContent = 'パスワードが違います。'; inp.value = ''; }
     }
     inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
-    modal('管理画面のロック', el('div', {}, [msg, el('div', { class: 'row' }, [inp])]), [
+
+    var forgot = el('details', { class: 'rule', style: 'margin-top:16px' }, [
+      el('summary', { text: 'パスワードを忘れた場合' }),
+      el('p', { class: 'vd', text: '1. 右上の［書き出し］でデータをファイルに保存' }),
+      el('p', { class: 'vd', text: '2. この端末のサイトデータを削除' }),
+      el('p', { class: 'vd', text: '3. アプリを開き直して［読み込み］でそのファイルを取り込む' }),
+      el('p', { class: 'vd', text: 'ロックは解除された状態に戻ります。' })
+    ]);
+
+    modal('管理画面のロック', el('div', {}, [msg, el('div', { class: 'row' }, [inp]), forgot]), [
       el('button', { class: 'btn', text: '解除', onclick: submit }),
       el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
     ]);
