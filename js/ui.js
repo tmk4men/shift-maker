@@ -912,6 +912,7 @@
           D.lastResult = null; saveAndRender();
         }
       }),
+      el('button', { class: 'btn', text: '画像で保存', onclick: exportImage }),
       el('button', { class: 'btn ghost', text: 'CSV出力', onclick: exportCsv }),
       el('button', {
         class: 'btn ghost', text: '印刷', onclick: function () {
@@ -1339,6 +1340,15 @@
     Store.save(); render();
     var hard = res.violations.filter(function (v) { return v.level === 'hard'; }).length;
     toast(hard === 0 ? 'シフトを作成しました（ルール違反なし）' : 'シフトを作成しました（要確認 ' + hard + ' 件）');
+  }
+
+  function exportImage() {
+    var hasShift = Store.monthDates().some(function (d) {
+      return D.shiftTypes.some(function (st) { return Store.assignedOf(d, st.id).length > 0; });
+    });
+    if (!hasShift) { toast('先にシフトを作成してください'); return; }
+    try { ShiftImage.download(D); toast('画像を保存しました'); }
+    catch (e) { toast('画像を作れませんでした'); }
   }
 
   function exportCsv() {

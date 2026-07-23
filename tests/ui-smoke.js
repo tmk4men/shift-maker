@@ -107,7 +107,7 @@ function tryRun(label, fn) {
 }
 
 /* ---------- 読み込み ---------- */
-['util', 'store', 'rules', 'solver'].forEach(f =>
+['util', 'store', 'rules', 'solver', 'image'].forEach(f =>
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js', f + '.js'), 'utf8'), sandbox, { filename: f + '.js' }));
 
 // 初期状態は「空」なので、画面テストはサンプル店を入れてから行う
