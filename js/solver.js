@@ -159,14 +159,18 @@ var Solver = (function () {
         return;
       }
       var sc = Rules.score(ctx, e.id, slot.date, slot.stId);
-      var item = { empId: e.id, score: sc.score, why: sc.why, blocked: blocked };
-      if (mustCoverRole && !missing.some(function (r) { return e[r]; })) spare.push(item);
+      var covers = missing.filter(function (r) { return e[r]; }).length;
+      var item = { empId: e.id, score: sc.score, why: sc.why, blocked: blocked, covers: covers };
+      // 残り1席で必須役割が2つなら、両方を満たす人しか置けない
+      if (mustCoverRole && covers < Math.min(missing.length, seatsLeft ? missing.length - (seatsLeft - 1) : 1)) spare.push(item);
       else out.push(item);
     });
-    // 責任者・有資格者を確保できない場合でも、人数だけは埋める（役割不足は違反として報告される）
+    // 役割を満たす人が誰もいない場合でも、人数だけは埋める（役割不足は違反として報告される）
     if (!out.length && spare.length) out = spare;
 
     out.sort(function (a, b) {
+      // 席が足りないときは、必須役割を多く満たす人を優先
+      if (mustCoverRole && a.covers !== b.covers) return b.covers - a.covers;
       if (a.score !== b.score) return a.score - b.score;
       return a.empId < b.empId ? -1 : 1;            // 同点は ID 順（決定的にする）
     });

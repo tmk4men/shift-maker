@@ -415,6 +415,22 @@ var Rules = (function () {
     return { score: total, why: why };
   }
 
+  /** 既に割り当て済みの1件を、いったん外してハード制約を全部かけ直す。
+   *  日数・時間などの累積系は別途チェックするため、ここでは重複分を除く。 */
+  var CUMULATIVE = { 'OPS-035': 1, 'OPS-064': 1, 'OPS-042': 1, 'LAW-006': 1, 'LAW-001': 1, 'LAW-041': 1 };
+  function recheck(ctx, date, stId, empId) {
+    var arr = ctx.assign[date][stId];
+    var idx = arr.indexOf(empId);
+    if (idx < 0) return [];
+    undoAssign(ctx, date, stId, empId);
+    var ng = hardCheck(ctx, empId, date, stId);
+    doAssign(ctx, date, stId, empId);
+    var a2 = ctx.assign[date][stId];                 // 並び順を元に戻す
+    a2.splice(a2.indexOf(empId), 1);
+    a2.splice(idx, 0, empId);
+    return ng.filter(function (v) { return !CUMULATIVE[v.ruleId]; });
+  }
+
   /* =========================================================
      検証：出来上がったシフト全体をチェック
      ========================================================= */
@@ -445,13 +461,20 @@ var Rules = (function () {
         if (need > 0 && rr.certified && !list.some(function (id) { return ctx.emp[id] && ctx.emp[id].certified; }))
           push('hard', 'OPS-004', date + ' ' + st.name + '：有資格者がいません', date, st.id);
 
-        list.forEach(function (id) {
-          var e = ctx.emp[id]; if (!e) return;
-          if (e.newbie && !list.some(function (o) { return isTrainerFor(ctx, o, id); }))
-            push('hard', 'OPS-006', date + ' ' + st.name + '：新人' + e.name + 'さんに教育担当が付いていません', date, st.id, id);
+        list.slice().forEach(function (id) {
+          var e = ctx.emp[id];
+          if (!e) {
+            push('hard', 'OPS-001', date + ' ' + st.name + '：存在しない従業員が割り当てられています(' + id + ')', date, st.id);
+            return;
+          }
           var req = Store.requestOf(id, date);
           if (req === 'off') push('soft', 'OPS-030', date + '：' + e.name + 'さんの希望休に出勤が入っています', date, st.id, id);
-          if (req === 'must' || req === 'paid') push('hard', 'LAW-060', date + '：' + e.name + 'さんの確定休/有給に出勤が入っています', date, st.id, id);
+
+          // 既存の割当を1件ずつ外してハード制約を全部かけ直す
+          // （手動編集・JSON読み込み・古い保存データで違反が紛れ込むのを防ぐ）
+          recheck(ctx, date, st.id, id).forEach(function (v) {
+            push('hard', v.ruleId, date + ' ' + st.name + '：' + e.name + 'さん — ' + v.msg, date, st.id, id);
+          });
         });
       });
     });

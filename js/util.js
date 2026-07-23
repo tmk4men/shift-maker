@@ -89,10 +89,30 @@ var U = (function () {
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  /** 数値入力の安全化：空欄・NaN・範囲外を既定値/範囲内に丸める */
+  function num(v, min, max, def) {
+    var n = parseFloat(v);
+    if (isNaN(n)) n = (def === undefined ? min : def);
+    if (min !== undefined && n < min) n = min;
+    if (max !== undefined && n > max) n = max;
+    return n;
+  }
+  /** 'HH:MM' として妥当か */
+  function isTime(s) {
+    if (!/^\d{1,2}:\d{2}$/.test(String(s || ''))) return false;
+    var p = String(s).split(':');
+    return +p[0] >= 0 && +p[0] <= 24 && +p[1] >= 0 && +p[1] < 60;
+  }
+  /** CSVの1セル（カンマ・改行・引用符を安全に） */
+  function csv(v) {
+    return '"' + String(v === undefined || v === null ? '' : v).replace(/"/g, '""') + '"';
+  }
+
   return {
     pad: pad, ymd: ymd, parseYmd: parseYmd, daysInMonth: daysInMonth, weekdayOf: weekdayOf,
     WD: WD, monthDates: monthDates, addDays: addDays, hm2min: hm2min, min2hm: min2hm,
-    min2h: min2h, overlap: overlap, yen: yen, el: el, esc: esc, uid: uid, clone: clone
+    min2h: min2h, overlap: overlap, yen: yen, el: el, esc: esc, uid: uid, clone: clone,
+    num: num, isTime: isTime, csv: csv
   };
 })();
 

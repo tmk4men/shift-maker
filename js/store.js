@@ -99,26 +99,107 @@ var Store = (function () {
 
   function load() {
     try {
-      var raw = localStorage.getItem(KEY);
-      if (raw) { data = JSON.parse(raw); migrate(); return data; }
-    } catch (e) { console.warn('保存データの読み込みに失敗', e); }
+      var raw = (typeof localStorage === 'undefined') ? null : localStorage.getItem(KEY);
+      if (raw) {
+        var obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) { data = migrate(obj); return data; }
+      }
+    } catch (e) { console.warn('保存データを読めなかったため初期データで起動します', e); }
     data = sampleData();
     return data;
   }
 
-  function migrate() {
+  /** 足りないキー・壊れた型を既定値で補う（保存データの破損・旧バージョン対策） */
+  function migrate(target) {
+    var d = target || data;
     var base = sampleData();
-    // 足りないキーを既定値で補完（バージョンアップ耐性）
+    if (!d || typeof d !== 'object' || Array.isArray(d)) d = base;
+
     Object.keys(base).forEach(function (k) {
-      if (data[k] === undefined) data[k] = base[k];
+      var want = base[k];
+      var got = d[k];
+      var okType = Array.isArray(want) ? Array.isArray(got)
+        : (want !== null && typeof want === 'object') ? (got !== null && typeof got === 'object' && !Array.isArray(got))
+          : true;
+      if (got === undefined || got === null || !okType) d[k] = U.clone(want);
     });
     Object.keys(base.settings).forEach(function (k) {
-      if (data.settings[k] === undefined) data.settings[k] = base.settings[k];
+      if (d.settings[k] === undefined || d.settings[k] === null) d.settings[k] = base.settings[k];
     });
-    data.employees.forEach(function (e) {
-      var d = base.employees[0];
-      Object.keys(d).forEach(function (k) { if (e[k] === undefined) e[k] = U.clone(d[k]); });
+    // 年月が不正なら今月に戻す
+    var s = d.settings;
+    if (!(s.year >= 1970 && s.year <= 3000)) s.year = base.settings.year;
+    if (!(s.month >= 1 && s.month <= 12)) s.month = base.settings.month;
+    if (!Array.isArray(s.holidays)) s.holidays = [];
+
+    if (!d.shiftTypes.length) d.shiftTypes = U.clone(base.shiftTypes);
+    d.shiftTypes.forEach(function (st, i) {
+      if (!st.id) st.id = 'S' + i;
+      if (!st.name) st.name = '勤務' + (i + 1);
+      if (!/^\d{1,2}:\d{2}$/.test(st.start || '')) st.start = '09:00';
+      if (!/^\d{1,2}:\d{2}$/.test(st.end || '')) st.end = '18:00';
+      st.breakMin = Math.max(0, Math.min(600, +st.breakMin || 0));
     });
+
+    var defEmp = base.employees[0];
+    d.employees = d.employees.filter(function (e) { return e && typeof e === 'object'; });
+    d.employees.forEach(function (e, i) {
+      Object.keys(defEmp).forEach(function (k) {
+        if (e[k] === undefined || e[k] === null) e[k] = U.clone(defEmp[k]);
+        else if (Array.isArray(defEmp[k]) && !Array.isArray(e[k])) e[k] = U.clone(defEmp[k]);
+      });
+      if (!e.id) e.id = U.uid('e');
+      if (!e.name) e.name = '従業員' + (i + 1);
+      e.wage = Math.max(0, +e.wage || 0);
+      ['minDays', 'maxDays', 'maxConsecutive', 'maxHoursMonth', 'maxNights', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
+        e[k] = Math.max(0, +e[k] || 0);
+      });
+      e.priority = Math.max(-3, Math.min(3, +e.priority || 0));
+    });
+
+    // 勤務区分・従業員の消滅に伴う参照切れを掃除
+    var stIds = {}; d.shiftTypes.forEach(function (st) { stIds[st.id] = 1; });
+    var empIds = {}; d.employees.forEach(function (e) { empIds[e.id] = 1; });
+    d.employees.forEach(function (e) {
+      e.canShift = (e.canShift || []).filter(function (x) { return stIds[x]; });
+      e.ngPartners = (e.ngPartners || []).filter(function (x) { return empIds[x]; });
+      e.goodPartners = (e.goodPartners || []).filter(function (x) { return empIds[x]; });
+      if (e.trainerId && !empIds[e.trainerId]) e.trainerId = '';
+    });
+    [d.assignments, d.prevMonth].forEach(function (map) {
+      Object.keys(map || {}).forEach(function (date) {
+        Object.keys(map[date] || {}).forEach(function (stId) {
+          if (!stIds[stId]) { delete map[date][stId]; return; }
+          map[date][stId] = (map[date][stId] || []).filter(function (x) { return empIds[x]; });
+        });
+      });
+    });
+    ['requests', 'avail', 'submissions', 'carryover'].forEach(function (key) {
+      Object.keys(d[key] || {}).forEach(function (id) { if (!empIds[id]) delete d[key][id]; });
+    });
+    Object.keys(d.demand.byWeekday || {}).forEach(function (stId) { if (!stIds[stId]) delete d.demand.byWeekday[stId]; });
+    d.shiftTypes.forEach(function (st) {
+      if (!Array.isArray(d.demand.byWeekday[st.id]) || d.demand.byWeekday[st.id].length !== 7)
+        d.demand.byWeekday[st.id] = [0, 0, 0, 0, 0, 0, 0];
+      if (!d.demand.roleReq[st.id]) d.demand.roleReq[st.id] = { leader: false, certified: false };
+    });
+    return d;
+  }
+
+  /** 従業員を削除し、関連データも一緒に消す */
+  function removeEmployee(empId) {
+    var d = get();
+    d.employees = d.employees.filter(function (e) { return e.id !== empId; });
+    migrate();
+    save();
+  }
+
+  /** 勤務区分を削除し、関連データも一緒に消す */
+  function removeShiftType(stId) {
+    var d = get();
+    d.shiftTypes = d.shiftTypes.filter(function (s) { return s.id !== stId; });
+    migrate();
+    save();
   }
 
   function save() {
@@ -141,10 +222,37 @@ var Store = (function () {
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   }
 
+  /** 読み込みは一時オブジェクトで完結させてから差し替える（失敗しても現在のデータを壊さない） */
   function importJson(text) {
     var obj = JSON.parse(text);
-    if (!obj.employees || !obj.shiftTypes) throw new Error('シフトデータではありません');
-    data = obj; migrate(); save();
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('シフトデータではありません');
+    if (!Array.isArray(obj.employees) || !Array.isArray(obj.shiftTypes)) throw new Error('シフトデータではありません（従業員・勤務区分が見つかりません）');
+    var fixed = migrate(U.clone(obj));
+    data = fixed; save();
+  }
+
+  /** スタッフ1人分の提出内容だけを取り込む（LINE等で受け取ったコード用） */
+  function exportSubmission(empId) {
+    var d = get(), e = empById(empId);
+    if (!e) throw new Error('従業員が見つかりません');
+    return {
+      t: 'shift-submission', v: 1, name: e.name, id: empId,
+      ym: d.settings.year + '-' + U.pad(d.settings.month),
+      avail: d.avail[empId] || {}, requests: d.requests[empId] || {}
+    };
+  }
+  function importSubmission(obj) {
+    var d = get();
+    if (!obj || obj.t !== 'shift-submission') throw new Error('提出コードではありません');
+    var e = empById(obj.id) || d.employees.filter(function (x) { return x.name === obj.name; })[0];
+    if (!e) throw new Error('「' + (obj.name || '?') + '」という従業員が登録されていません');
+    var ym = d.settings.year + '-' + U.pad(d.settings.month);
+    if (obj.ym && obj.ym !== ym) throw new Error('対象月が違います（提出コードは ' + obj.ym + '）');
+    d.avail[e.id] = obj.avail || {};
+    d.requests[e.id] = obj.requests || {};
+    d.submissions[e.id] = { status: 'submitted', at: '取込' };
+    save();
+    return e;
   }
 
   /* ---------- 参照ヘルパ ---------- */
@@ -208,6 +316,8 @@ var Store = (function () {
   return {
     load: load, save: save, get: get, reset: reset, setData: setData,
     exportJson: exportJson, importJson: importJson, sampleData: sampleData,
+    removeEmployee: removeEmployee, removeShiftType: removeShiftType,
+    exportSubmission: exportSubmission, importSubmission: importSubmission,
     stCalc: stCalc, empById: empById, stById: stById, monthDates: monthDates,
     needOf: needOf, assignedOf: assignedOf, requestOf: requestOf,
     availOf: availOf, setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,

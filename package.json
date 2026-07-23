@@ -1,0 +1,9 @@
+{
+  "name": "shift-maker",
+  "version": "1.0.0",
+  "description": "ルールブック方式のシフト自動作成アプリ（AI不使用・ローカル完結）",
+  "private": true,
+  "scripts": {
+    "test": "node tests/test.js && node tests/ui-smoke.js"
+  }
+}

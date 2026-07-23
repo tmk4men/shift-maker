@@ -3,7 +3,27 @@
   var D = Store.load();
   var el = U.el;
   var currentTab = 'setup';
-  var staffView = '';     // スタッフ提出モードで選択中の従業員ID
+  var staffView = '';     // 提出画面を開いている従業員ID
+
+  /* スタッフ専用モード：?staff=従業員ID で開くと提出画面だけになる（管理操作は出さない） */
+  var staffOnly = '';
+  try {
+    var q = (typeof location !== 'undefined' && location.search) ? location.search : '';
+    var m = q.match(/[?&]staff=([^&]+)/);
+    if (m) staffOnly = decodeURIComponent(m[1]);
+  } catch (err) { staffOnly = ''; }
+
+  /* 受付が締め切られていないか（締切日を過ぎていないか） */
+  function collectClosed() {
+    if (!D.settings.collectOpen) return '責任者が受付を締め切りました';
+    var dl = D.settings.deadline;
+    if (dl) {
+      var t = new Date();
+      var today = t.getFullYear() + '-' + U.pad(t.getMonth() + 1) + '-' + U.pad(t.getDate());
+      if (today > dl) return '提出期限（' + dl + '）を過ぎています';
+    }
+    return '';
+  }
 
   /* ================= 共通 ================= */
   function toast(msg) {
@@ -54,10 +74,10 @@
     p.appendChild(card('店舗・対象月', 'まずはここだけ設定すれば動きます。', [
       el('div', { class: 'row' }, [
         field('店舗名', input('text', s.storeName, function (e) { s.storeName = e.target.value; Store.save(); })),
-        field('年', input('number', s.year, function (e) { s.year = +e.target.value; saveAndRender(); }, { min: 2000, max: 2100 })),
+        field('年', input('number', s.year, function (e) { s.year = U.num(e.target.value, 2000, 2100, s.year); saveAndRender(); }, { min: 2000, max: 2100 })),
         field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return { v: m, t: m + '月' }; }), s.month,
           function (e) { s.month = +e.target.value; saveAndRender(); })),
-        field('人件費予算（0=無制限）', input('number', s.budget, function (e) { s.budget = +e.target.value; Store.save(); }, { step: 10000 })),
+        field('人件費予算（0=無制限）', input('number', s.budget, function (e) { s.budget = U.num(e.target.value, 0, 1e12, 0); Store.save(); }, { step: 10000, min: 0 })),
         field('週の起算日', select([{ v: 0, t: '日曜' }, { v: 1, t: '月曜' }], s.weekStartsOn, function (e) { s.weekStartsOn = +e.target.value; Store.save(); })),
         field('36協定', select([{ v: 'y', t: 'あり（残業可）' }, { v: 'n', t: 'なし（残業不可）' }], s.has36 ? 'y' : 'n',
           function (e) { s.has36 = e.target.value === 'y'; Store.save(); })),
@@ -82,9 +102,9 @@
       return el('tr', {}, [
         el('td', {}, [input('text', st.name, function (e) { st.name = e.target.value; Store.save(); }, { style: 'width:80px' })]),
         el('td', {}, [input('text', st.short, function (e) { st.short = e.target.value; Store.save(); }, { style: 'width:44px' })]),
-        el('td', {}, [input('time', st.start, function (e) { st.start = e.target.value; saveAndRender(); })]),
-        el('td', {}, [input('time', st.end, function (e) { st.end = e.target.value; saveAndRender(); })]),
-        el('td', {}, [input('number', st.breakMin, function (e) { st.breakMin = +e.target.value; saveAndRender(); }, { style: 'width:70px', step: 5 })]),
+        el('td', {}, [input('time', st.start, function (e) { if (U.isTime(e.target.value)) { st.start = e.target.value; saveAndRender(); } })]),
+        el('td', {}, [input('time', st.end, function (e) { if (U.isTime(e.target.value)) { st.end = e.target.value; saveAndRender(); } })]),
+        el('td', {}, [input('number', st.breakMin, function (e) { st.breakMin = U.num(e.target.value, 0, 600, 0); saveAndRender(); }, { style: 'width:70px', step: 5, min: 0, max: 600 })]),
         el('td', {}, [input('color', st.color, function (e) { st.color = e.target.value; Store.save(); }, { style: 'width:44px;padding:0' })]),
         el('td', { class: 'nowrap', text: U.min2h(c.work) + 'h' }),
         el('td', { class: 'nowrap', text: c.night > 0 ? U.min2h(c.night) + 'h' : '—' }),
@@ -92,8 +112,8 @@
         el('td', {}, [el('button', {
           class: 'btn ghost sm danger', text: '削除', onclick: function () {
             if (D.shiftTypes.length <= 1) return toast('最低1つは必要です');
-            if (!confirm(st.name + ' を削除しますか？')) return;
-            D.shiftTypes.splice(i, 1); delete D.demand.byWeekday[st.id]; saveAndRender();
+            if (!confirm(st.name + ' を削除します。\n作成済みシフトのこの勤務、必要人数の設定、各人の「担当できる勤務区分」からも削除されます。よろしいですか？')) return;
+            Store.removeShiftType(st.id); D = Store.get(); render();
           }
         })])
       ]);
@@ -125,7 +145,7 @@
       var arr = D.demand.byWeekday[st.id] || (D.demand.byWeekday[st.id] = [0, 0, 0, 0, 0, 0, 0]);
       var rr = D.demand.roleReq[st.id] || (D.demand.roleReq[st.id] = {});
       return el('tr', {}, [el('td', { text: st.name })].concat(arr.map(function (v, i) {
-        return el('td', {}, [input('number', v, function (e) { arr[i] = +e.target.value; Store.save(); }, { style: 'width:56px', min: 0 })]);
+        return el('td', {}, [input('number', v, function (e) { arr[i] = U.num(e.target.value, 0, 99, 0); Store.save(); }, { style: 'width:56px', min: 0, max: 99 })]);
       })).concat([
         el('td', {}, [checkbox('', rr.leader, function (e) { rr.leader = e.target.checked; Store.save(); })]),
         el('td', {}, [checkbox('', rr.certified, function (e) { rr.certified = e.target.checked; Store.save(); })])
@@ -148,7 +168,7 @@
             return el('td', {}, [input('number', ov[st.id] === undefined ? '' : ov[st.id], function (e) {
               if (!D.demand.overrides[date]) D.demand.overrides[date] = {};
               if (e.target.value === '') delete D.demand.overrides[date][st.id];
-              else D.demand.overrides[date][st.id] = +e.target.value;
+              else D.demand.overrides[date][st.id] = U.num(e.target.value, 0, 99, 0);
               Store.save();
             }, { style: 'width:56px', min: 0, placeholder: Store.needOf(date, st.id) })]);
           })));
@@ -181,9 +201,8 @@
           el('button', { class: 'btn ghost sm', text: '編集', onclick: function () { editEmp(e); } }),
           el('button', {
             class: 'btn ghost sm danger', text: '削除', onclick: function () {
-              if (!confirm(e.name + ' を削除しますか？')) return;
-              D.employees = D.employees.filter(function (x) { return x.id !== e.id; });
-              saveAndRender();
+              if (!confirm(e.name + ' さんを削除します。\n作成済みシフト・希望・提出内容・相性設定からも削除されます。よろしいですか？')) return;
+              Store.removeEmployee(e.id); D = Store.get(); render();
             }
           })
         ])
@@ -214,7 +233,7 @@
     var b = el('div', {}, []);
     b.appendChild(el('div', { class: 'row' }, [
       field('氏名', input('text', e.name, function (ev) { e.name = ev.target.value; })),
-      field('時給', input('number', e.wage, function (ev) { e.wage = +ev.target.value; }, { step: 10 })),
+      field('時給', input('number', e.wage, function (ev) { e.wage = U.num(ev.target.value, 0, 100000, 0); }, { step: 10, min: 0 })),
       field('雇用区分', select([{ v: 'full', t: '正社員' }, { v: 'part', t: 'パート/アルバイト' }, { v: 'student', t: '学生' }, { v: 'contract', t: '契約' }], e.employment, function (ev) { e.employment = ev.target.value; }))
     ]));
 
@@ -245,11 +264,11 @@
 
     b.appendChild(el('h4', { text: '勤務量', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, [
-      field('最低出勤日数', input('number', e.minDays, function (ev) { e.minDays = +ev.target.value; }, { min: 0 })),
-      field('最大出勤日数', input('number', e.maxDays, function (ev) { e.maxDays = +ev.target.value; }, { min: 0 })),
-      field('連勤上限', input('number', e.maxConsecutive, function (ev) { e.maxConsecutive = +ev.target.value; }, { min: 0 })),
-      field('月間上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = +ev.target.value; }, { min: 0 })),
-      field('月間夜勤上限(0=なし)', input('number', e.maxNights, function (ev) { e.maxNights = +ev.target.value; }, { min: 0 })),
+      field('最低出勤日数', input('number', e.minDays, function (ev) { e.minDays = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
+      field('最大出勤日数', input('number', e.maxDays, function (ev) { e.maxDays = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
+      field('連勤上限', input('number', e.maxConsecutive, function (ev) { e.maxConsecutive = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
+      field('月間上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
+      field('月間夜勤上限(0=なし)', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('優遇度 -3〜+3', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
         return { v: v, t: v > 0 ? '+' + v + '（多めに）' : v < 0 ? v + '（控えめに）' : '0（標準）' };
       }), e.priority, function (ev) { e.priority = +ev.target.value; }))
@@ -257,8 +276,8 @@
 
     b.appendChild(el('h4', { text: '年収の壁（扶養内で働きたい人）', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, [
-      field('年収上限（0=設定しない）', input('number', e.incomeCap, function (ev) { e.incomeCap = +ev.target.value; }, { step: 10000 })),
-      field('年初からの累計賃金', input('number', e.ytdEarnings, function (ev) { e.ytdEarnings = +ev.target.value; }, { step: 10000 }))
+      field('年収上限（0=設定しない）', input('number', e.incomeCap, function (ev) { e.incomeCap = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 })),
+      field('年初からの累計賃金', input('number', e.ytdEarnings, function (ev) { e.ytdEarnings = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 }))
     ]));
 
     var others = D.employees.filter(function (x) { return x.id !== e.id; });
@@ -304,13 +323,19 @@
     /* 提出状況 */
     var statusRows = D.employees.map(function (e) {
       var sub = Store.submissionOf(e.id);
+      var filled = dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length;
       return el('tr', {}, [
         el('td', { text: e.name }),
         el('td', {}, [el('span', { class: 'badge ' + (sub.status === 'submitted' ? 'ok' : 'warn'), text: sub.status === 'submitted' ? '提出済み' : '未提出' })]),
+        el('td', { class: 'muted', text: filled + ' / ' + dates.length + ' 日' }),
         el('td', { class: 'muted', text: sub.at || '' }),
-        el('td', {}, [el('button', {
-          class: 'btn ghost sm', text: '提出画面を開く', onclick: function () { staffView = e.id; render(); }
-        })])
+        el('td', {}, [
+          el('button', { class: 'btn ghost sm', text: '提出画面を開く', onclick: function () { staffView = e.id; render(); } }),
+          el('button', {
+            class: 'btn ghost sm', text: 'スタッフ用リンク', title: 'この人だけの提出画面のURL',
+            onclick: function () { showStaffLink(e); }
+          })
+        ])
       ]);
     });
 
@@ -331,7 +356,13 @@
           }
         })])
       ]),
-      el('table', {}, [el('thead', {}, [el('tr', {}, ['氏名', '状態', '提出日時', ''].map(function (h) { return el('th', { text: h }); }))]), el('tbody', {}, statusRows)])
+      el('div', { class: 'scroll' }, [el('table', {}, [
+        el('thead', {}, [el('tr', {}, ['氏名', '状態', '入力済み', '提出日時', ''].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, statusRows)
+      ])]),
+      el('div', { class: 'row', style: 'margin-top:10px' }, [
+        el('button', { class: 'btn ghost sm', text: '📥 提出コードを取り込む', onclick: importCodeDialog })
+      ])
     ]));
 
     /* スタッフ提出画面 */
@@ -359,6 +390,51 @@
     ]));
   }
 
+  function showStaffLink(e) {
+    var base = '';
+    try { base = (typeof location !== 'undefined') ? (location.origin + location.pathname) : 'index.html'; }
+    catch (err) { base = 'index.html'; }
+    var url = base + '?staff=' + encodeURIComponent(e.id);
+    var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:70px;font-family:monospace;font-size:12px' });
+    ta.value = url;
+    var b = el('div', {}, [
+      el('p', { class: 'hint', text: 'このURLを開くと、' + e.name + ' さんの希望提出画面だけが表示されます（管理用の設定は出ません）。' }),
+      ta,
+      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ データはブラウザの中だけに保存されます。別の端末・別のブラウザで開くとデータは共有されません。別端末で入力してもらう場合は、提出画面の［提出コードをコピー］で受け取って、この画面の［提出コードを取り込む］に貼り付けてください。' })
+    ]);
+    modal('スタッフ用リンク', b, [
+      el('button', {
+        class: 'btn', text: 'コピーする', onclick: function () {
+          try {
+            if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(url);
+            toast('コピーしました');
+          } catch (err2) { toast('コピーできませんでした'); }
+        }
+      }),
+      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
+    ]);
+  }
+
+  function importCodeDialog() {
+    var ta = el('textarea', { placeholder: 'ここに提出コードを貼り付け', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
+    var msg = el('p', { class: 'hint', text: 'スタッフから受け取ったコードを貼り付けて［取り込む］を押してください。' });
+    modal('提出コードの取り込み', el('div', {}, [msg, ta]), [
+      el('button', {
+        class: 'btn', text: '取り込む', onclick: function () {
+          try {
+            var emp = Store.importSubmission(decodeCode(ta.value));
+            closeModal(); D = Store.get(); render();
+            toast(emp.name + 'さんの希望を取り込みました');
+          } catch (err) {
+            msg.textContent = '取り込めませんでした：' + err.message;
+            msg.className = 'hint';
+          }
+        }
+      }),
+      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
+    ]);
+  }
+
   var REQ_CYCLE = ['', 'off', 'must', 'paid', 'want'];
   var REQ_LABEL = { '': '', off: '△', must: '×', paid: '有', want: '◎' };
   var REQ_CLASS = { '': '', off: 'req-off', must: 'req-must', paid: 'req-paid', want: 'req-want' };
@@ -376,6 +452,9 @@
   }
 
   function staffSubmitCard(e, dates) {
+    var closed = collectClosed();
+    var locked = !!closed;
+
     var rows = dates.map(function (d) {
       var w = U.weekdayOf(d);
       var av = D.avail[e.id] && D.avail[e.id][d] ? D.avail[e.id][d] : null;
@@ -383,15 +462,17 @@
       var req = Store.requestOf(e.id, d);
 
       var fromI = input('time', av && av.from ? av.from : '09:00', function (ev) {
+        if (!U.isTime(ev.target.value)) return;
         var cur = D.avail[e.id][d]; cur.from = ev.target.value; Store.save();
       });
       var toI = input('time', av && av.to ? av.to : '18:00', function (ev) {
+        if (!U.isTime(ev.target.value)) return;
         var cur = D.avail[e.id][d]; cur.to = ev.target.value; Store.save();
       });
-      if (mode !== 'time') { fromI.disabled = true; toI.disabled = true; }
+      if (mode !== 'time' || locked) { fromI.disabled = true; toI.disabled = true; }
 
       var sel = select([
-        { v: '', t: '未入力' }, { v: 'allday', t: '終日OK' }, { v: 'time', t: '時間を指定' }, { v: 'off', t: '× 行けない' }
+        { v: '', t: '未入力' }, { v: 'allday', t: '⭕ 終日いつでもOK' }, { v: 'time', t: '🕒 この時間なら行ける' }, { v: 'off', t: '❌ この日は行けない' }
       ], mode, function (ev) {
         var v = ev.target.value;
         if (!D.avail[e.id]) D.avail[e.id] = {};
@@ -401,27 +482,30 @@
         else D.avail[e.id][d] = { from: fromI.value, to: toI.value };
         Store.save(); render();
       });
+      sel.disabled = locked;
 
       var reqSel = select([
-        { v: '', t: '—' }, { v: 'off', t: '△ できれば休み' }, { v: 'must', t: '× 絶対休み' },
-        { v: 'paid', t: '有給を使う' }, { v: 'want', t: '◎ 入りたい' }
+        { v: '', t: '希望なし' }, { v: 'off', t: 'できれば休みたい' }, { v: 'must', t: '絶対に休みたい' },
+        { v: 'paid', t: '有給を使いたい' }, { v: 'want', t: 'ぜひ入りたい' }
       ], req, function (ev) {
         if (!D.requests[e.id]) D.requests[e.id] = {};
         if (ev.target.value === '') delete D.requests[e.id][d]; else D.requests[e.id][d] = ev.target.value;
         Store.save(); render();
       });
+      reqSel.disabled = locked;
 
-      return el('tr', {}, [
-        el('td', { class: w === 0 ? 'sun' : w === 6 ? 'sat' : '', text: d.slice(5) + '(' + U.WD[w] + ')' }),
-        el('td', {}, [sel]),
-        el('td', {}, [fromI]), el('td', {}, [toI]),
-        el('td', {}, [reqSel])
+      return el('tr', { class: 'day-row' }, [
+        el('td', { class: 'daycell ' + (w === 0 ? 'sun' : w === 6 ? 'sat' : ''), 'data-label': '日付', text: d.slice(5) + '（' + U.WD[w] + '）' }),
+        el('td', { 'data-label': '出勤できる？' }, [sel]),
+        el('td', { 'data-label': '何時から' }, [fromI]),
+        el('td', { 'data-label': '何時まで' }, [toI]),
+        el('td', { 'data-label': '希望' }, [reqSel])
       ]);
     });
 
-    var bulk = el('div', { class: 'row', style: 'margin-bottom:10px' }, [
+    var bulk = el('div', { class: 'row', style: 'margin-bottom:10px' }, locked ? [] : [
       el('button', {
-        class: 'btn ghost sm', text: '全日「終日OK」にする', onclick: function () {
+        class: 'btn ghost sm', text: '全部「終日OK」', onclick: function () {
           if (!D.avail[e.id]) D.avail[e.id] = {};
           dates.forEach(function (d) { D.avail[e.id][d] = { allday: true }; });
           Store.save(); render();
@@ -438,7 +522,19 @@
         }
       }),
       el('button', {
+        class: 'btn ghost sm', text: '全部「時間指定」にする', onclick: function () {
+          if (!D.avail[e.id]) D.avail[e.id] = {};
+          dates.forEach(function (d) {
+            var cur = D.avail[e.id][d];
+            if (cur && cur.off) return;
+            D.avail[e.id][d] = { from: (cur && cur.from) || '09:00', to: (cur && cur.to) || '18:00' };
+          });
+          Store.save(); render();
+        }
+      }),
+      el('button', {
         class: 'btn ghost sm danger', text: '入力をクリア', onclick: function () {
+          if (!confirm('入力した内容をすべて消します。よろしいですか？')) return;
           delete D.avail[e.id]; delete D.requests[e.id];
           D.submissions[e.id] = { status: 'open', at: '' };
           Store.save(); render();
@@ -446,35 +542,89 @@
       })
     ]);
 
-    return card('📱 ' + e.name + ' さんの提出画面',
-      '「行ける日と時間」「休みたい日」を入れて提出ボタンを押してください。', [
+    var doneCount = dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length;
+
+    var foot = locked ? [
+      el('div', { class: 'badge ng', text: '⚠ ' + closed + '。内容の確認のみできます。' })
+    ] : [
+      el('button', {
+        class: 'btn big', text: '✅ この内容で提出する', onclick: function () {
+          if (doneCount === 0 && !confirm('まだ1日も入力されていません。このまま提出しますか？')) return;
+          var now = new Date();
+          D.submissions[e.id] = {
+            status: 'submitted',
+            at: now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + U.pad(now.getHours()) + ':' + U.pad(now.getMinutes())
+          };
+          Store.save();
+          toast(e.name + 'さんの希望を受け付けました');
+          if (staffOnly) { render(); return; }
+          staffView = ''; render();
+          if (Store.submittedCount() === D.employees.length) {
+            setTimeout(function () {
+              if (confirm('全員の提出がそろいました。今すぐシフトを自動作成しますか？')) {
+                D.settings.collectOpen = false; Store.save(); switchTab('shift'); doGenerate();
+              }
+            }, 300);
+          }
+        }
+      }),
+      el('button', {
+        class: 'btn ghost', text: '📋 提出コードをコピー', title: '別の端末で入力した場合、このコードを責任者に送ってください',
+        onclick: function () { showSubmissionCode(e); }
+      }),
+      staffOnly ? null : el('button', { class: 'btn ghost', text: '閉じる', onclick: function () { staffView = ''; render(); } })
+    ];
+
+    var sub = Store.submissionOf(e.id);
+    return card('📱 ' + e.name + ' さんの希望提出（' + D.settings.year + '年' + D.settings.month + '月）',
+      '「行ける日と時間」を選んで、いちばん下の提出ボタンを押してください。' +
+      (D.settings.deadline ? '　提出期限：' + D.settings.deadline : ''), [
+      el('div', { class: 'row', style: 'margin-bottom:8px' }, [
+        el('span', { class: 'badge ' + (sub.status === 'submitted' ? 'ok' : 'warn'), text: sub.status === 'submitted' ? '提出済み（' + sub.at + '）' : '未提出' }),
+        el('span', { class: 'badge ' + (doneCount === dates.length ? 'ok' : 'warn'), text: '入力 ' + doneCount + ' / ' + dates.length + ' 日' })
+      ]),
       bulk,
-      el('div', { class: 'scroll', style: 'max-height:420px' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['日付', '出勤可否', '何時から', '何時まで', '希望'].map(function (h) { return el('th', { text: h }); }))]),
+      el('div', { class: 'scroll staff-table', style: 'max-height:60vh' }, [el('table', {}, [
+        el('thead', {}, [el('tr', {}, ['日付', '出勤できる？', '何時から', '何時まで', '希望'].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
       ])]),
-      el('div', { class: 'row', style: 'margin-top:12px' }, [
-        el('button', {
-          class: 'btn big', text: 'この内容で提出する', onclick: function () {
-            var now = new Date();
-            D.submissions[e.id] = {
-              status: 'submitted',
-              at: now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + U.pad(now.getHours()) + ':' + U.pad(now.getMinutes())
-            };
-            Store.save(); staffView = ''; render();
-            toast(e.name + 'さんの希望を受け付けました');
-            if (Store.submittedCount() === D.employees.length) {
-              setTimeout(function () {
-                if (confirm('全員の提出がそろいました。今すぐシフトを自動作成しますか？')) {
-                  D.settings.collectOpen = false; Store.save(); switchTab('shift'); doGenerate();
-                }
-              }, 300);
-            }
-          }
-        }),
-        el('button', { class: 'btn ghost', text: '閉じる', onclick: function () { staffView = ''; render(); } })
-      ])
+      el('div', { class: 'row', style: 'margin-top:12px' }, foot)
     ]);
+  }
+
+  /* 提出内容をテキストコード化（別端末で入力 → 責任者に送って取り込む用） */
+  function showSubmissionCode(e) {
+    var code = encodeCode(Store.exportSubmission(e.id));
+    var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
+    ta.value = code;
+    var b = el('div', {}, [
+      el('p', { class: 'hint', text: 'このコードをコピーして、LINEやメールで責任者に送ってください。責任者は［希望・提出］タブの「提出コードを取り込む」から貼り付けます。' }),
+      ta
+    ]);
+    modal(e.name + ' さんの提出コード', b, [
+      el('button', {
+        class: 'btn', text: 'コピーする', onclick: function () {
+          try {
+            if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(code);
+            else { ta.select && ta.select(); document.execCommand && document.execCommand('copy'); }
+            toast('コピーしました');
+          } catch (err) { toast('コピーできませんでした。手動で選択してください'); }
+        }
+      }),
+      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
+    ]);
+  }
+
+  function encodeCode(obj) {
+    var json = JSON.stringify(obj);
+    try { return 'SHIFT1:' + btoa(unescape(encodeURIComponent(json))); }
+    catch (err) { return 'SHIFT0:' + json; }
+  }
+  function decodeCode(text) {
+    text = String(text || '').trim();
+    if (text.indexOf('SHIFT1:') === 0) return JSON.parse(decodeURIComponent(escape(atob(text.slice(7)))));
+    if (text.indexOf('SHIFT0:') === 0) return JSON.parse(text.slice(7));
+    return JSON.parse(text);   // 生のJSONも受け付ける
   }
 
   /* ================= ④ シフト表 ================= */
@@ -500,6 +650,18 @@
       })
     ]);
     p.appendChild(head);
+
+    /* 作成前チェック：作る前に分かる問題を先に出す */
+    var pre = preflight();
+    if (pre.length) {
+      p.appendChild(card('作成前チェック', '作る前に気づける問題です。このままでも作成できますが、結果に反映されます。',
+        pre.map(function (x) {
+          return el('div', { class: 'violation ' + (x.level === 'ng' ? 'hard' : '') }, [
+            el('div', { class: 'vt', text: x.msg }),
+            x.hint ? el('div', { class: 'vd', text: x.hint }) : null
+          ]);
+        })));
+    }
 
     if (res) {
       var hardN = res.violations.filter(function (v) { return v.level === 'hard'; }).length;
@@ -565,8 +727,67 @@
     ]));
   }
 
+  /** 作成前に分かる問題を洗い出す */
+  function preflight() {
+    var out = [];
+    var dates = Store.monthDates();
+
+    if (!D.employees.length) { out.push({ level: 'ng', msg: '従業員が1人も登録されていません', hint: '「② 従業員」で追加してください' }); return out; }
+
+    var totalNeed = 0;
+    dates.forEach(function (d) { D.shiftTypes.forEach(function (st) { totalNeed += Store.needOf(d, st.id); }); });
+    if (totalNeed === 0) out.push({ level: 'ng', msg: '必要人数が全部0人です', hint: '「① 基本設定」の必要人数（曜日別）を入れてください' });
+
+    // 供給と需要のざっくり比較
+    var capacity = D.employees.reduce(function (a, e) { return a + (e.maxDays || 0); }, 0);
+    if (totalNeed > capacity)
+      out.push({
+        level: 'warn', msg: '必要な延べ人数（' + totalNeed + '人日）が、全員の最大出勤日数の合計（' + capacity + '人日）を超えています',
+        hint: '人手が足りません。必要人数を下げるか、最大出勤日数を見直すか、増員が必要です'
+      });
+
+    // 勤務区分ごとに担当できる人がいるか
+    D.shiftTypes.forEach(function (st) {
+      var need = dates.some(function (d) { return Store.needOf(d, st.id) > 0; });
+      if (!need) return;
+      var n = D.employees.filter(function (e) { return (e.canShift || []).indexOf(st.id) >= 0; }).length;
+      if (n === 0) out.push({ level: 'ng', msg: st.name + 'を担当できる人が1人もいません', hint: '「② 従業員」の「担当できる勤務区分」を確認してください' });
+      var rr = (D.demand.roleReq || {})[st.id] || {};
+      if (rr.leader && !D.employees.some(function (e) { return e.leader && (e.canShift || []).indexOf(st.id) >= 0; }))
+        out.push({ level: 'ng', msg: st.name + 'は責任者必須ですが、担当できる責任者がいません' });
+      if (rr.certified && !D.employees.some(function (e) { return e.certified && (e.canShift || []).indexOf(st.id) >= 0; }))
+        out.push({ level: 'ng', msg: st.name + 'は有資格者必須ですが、担当できる有資格者がいません' });
+    });
+
+    // 新人に対する教育担当
+    var newbies = D.employees.filter(function (e) { return e.newbie; });
+    if (newbies.length && !D.employees.some(function (e) { return (e.trainer || e.leader) && !e.newbie; }))
+      out.push({ level: 'ng', msg: '新人がいますが、教育担当（またはリーダー）が誰も登録されていません', hint: '新人を配置できず、勤務が入りません' });
+
+    // 休憩不足
+    D.shiftTypes.forEach(function (st) {
+      var c = Store.stCalc(st);
+      if ((c.work > 480 && st.breakMin < 60) || (c.work > 360 && st.breakMin < 45))
+        out.push({ level: 'ng', msg: st.name + 'の休憩時間が法定を下回っています（実働' + U.min2h(c.work) + 'h / 休憩' + st.breakMin + '分）' });
+    });
+
+    // 提出状況
+    var un = D.employees.length - Store.submittedCount();
+    if (un > 0)
+      out.push({
+        level: 'warn', msg: '未提出が ' + un + ' 人います',
+        hint: '未提出の日は「' + (D.settings.unsubmittedPolicy === 'available' ? '出勤できる' : '出勤不可') + '」扱いで作成されます（「① 基本設定」で変更可）'
+      });
+
+    return out;
+  }
+
   function stat(k, v, cls) {
-    return el('div', { class: 'stat' }, [el('div', { class: 'k', text: k }), el('div', { class: 'v ' + (cls === 'ng' ? '' : ''), text: v })]);
+    var color = cls === 'ng' ? 'color:var(--ng)' : cls === 'warn' ? 'color:var(--warn)' : cls === 'ok' ? 'color:var(--ok)' : '';
+    return el('div', { class: 'stat' }, [
+      el('div', { class: 'k', text: k }),
+      el('div', { class: 'v', style: color, text: v })
+    ]);
   }
 
   function shiftOfEmp(empId, date) {
@@ -690,7 +911,7 @@
   function exportCsv() {
     var dates = Store.monthDates();
     var lines = [];
-    lines.push(['氏名'].concat(dates.map(function (d) { return d.slice(5) + '(' + U.WD[U.weekdayOf(d)] + ')'; })).concat(['日数', '時間']).join(','));
+    lines.push(['氏名'].concat(dates.map(function (d) { return d.slice(5) + '(' + U.WD[U.weekdayOf(d)] + ')'; })).concat(['日数', '時間']).map(U.csv).join(','));
     D.employees.forEach(function (e) {
       var days = 0, mins = 0;
       var row = [e.name].concat(dates.map(function (d) {
@@ -699,7 +920,7 @@
         var st = Store.stById(stId); days++; mins += Store.stCalc(st).work;
         return st.name;
       }));
-      lines.push(row.concat([days, U.min2h(mins)]).join(','));
+      lines.push(row.concat([days, U.min2h(mins)]).map(U.csv).join(','));
     });
     var blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
     var a = document.createElement('a');
@@ -787,6 +1008,32 @@
       ]);
     }
 
+    /* かんたん設定（プリセット） */
+    var PRESETS = {
+      balanced: { label: '⚖ バランス重視', desc: '希望と公平性のバランス（初期設定）', w: {} },
+      request: { label: '🙋 希望重視', desc: '希望休をできるだけ通す。公平性は少し犠牲に', w: { 'OPS-030': 20000, 'OPS-031': 8000, 'OPS-080': 400, 'OPS-081': 300, 'OPS-084': 800 } },
+      fair: { label: '⚖ 公平重視', desc: '夜勤・土日・労働時間の偏りを最小に', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
+      cost: { label: '💰 人件費重視', desc: '単価の高い人の投入を抑える（予算設定が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
+    };
+    p.appendChild(card('かんたん設定', '細かい数字を触らずに、方針だけ選べます。押すと下の重みがまとめて変わります。', [
+      el('div', { class: 'row' }, Object.keys(PRESETS).map(function (k) {
+        var ps = PRESETS[k];
+        return el('button', {
+          class: 'btn ghost', text: ps.label, title: ps.desc, onclick: function () {
+            Object.keys(ps.w).forEach(function (id) {
+              if (!D.ruleConfig[id]) D.ruleConfig[id] = {};
+              D.ruleConfig[id].weight = ps.w[id];
+            });
+            if (k === 'balanced') {
+              Object.keys(D.ruleConfig).forEach(function (id) { delete D.ruleConfig[id].weight; });
+            }
+            saveAndRender(); toast(ps.label + ' に変更しました');
+          }
+        });
+      })),
+      el('p', { class: 'hint', style: 'margin-top:8px', text: '※ 法令ルールはどの設定でも必ず守られます。' })
+    ]));
+
     p.appendChild(card('法令ルール（変更不可）', 'rules/01-legal.md に対応。労働基準法などに基づく制約です。', groups.law.map(ruleRow)));
     p.appendChild(card('運用ルール', 'rules/02-operational.md・05-real-world-knowledge.md に対応。現場に合わせて調整できます。', groups.ops.map(ruleRow)));
   }
@@ -798,6 +1045,30 @@
       else D.ruleConfig[id][k] = patch[k];
     });
     saveAndRender();
+  }
+
+  /* ================= スタッフ専用モード（?staff=従業員ID） ================= */
+  function renderStaffOnly() {
+    // 管理用のタブ・操作を隠す
+    var tabsEl = document.getElementById('tabs');
+    if (tabsEl && tabsEl.style) tabsEl.style.display = 'none';
+    var ha = document.querySelector ? document.querySelector('.header-actions') : null;
+    if (ha && ha.style) ha.style.display = 'none';
+    ['setup', 'staff', 'shift', 'summary', 'rules'].forEach(function (n) {
+      var pn = document.getElementById('panel-' + n);
+      if (pn) { pn.innerHTML = ''; pn.classList.add('hidden'); }
+    });
+
+    var p = document.getElementById('panel-request');
+    p.classList.remove('hidden');
+    p.innerHTML = '';
+    var e = Store.empById(staffOnly);
+    if (!e) {
+      p.appendChild(card('スタッフが見つかりません',
+        'このリンクの従業員（' + staffOnly + '）は登録されていません。責任者にリンクを確認してください。', []));
+      return;
+    }
+    p.appendChild(staffSubmitCard(e, Store.monthDates()));
   }
 
   /* ================= タブ・初期化 ================= */
@@ -814,6 +1085,7 @@
 
   function render() {
     D = Store.get();
+    if (staffOnly) return renderStaffOnly();
     if (currentTab === 'setup') renderSetup();
     if (currentTab === 'staff') renderStaff();
     if (currentTab === 'request') renderRequest();

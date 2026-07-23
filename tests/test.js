@@ -419,11 +419,82 @@ T('シナリオ12：手動でセルを触ったときの再検証');
   if (!a[dt].N) a[dt].N = [];
   Object.keys(a[dt]).forEach(k => { a[dt][k] = a[dt][k].filter(x => x !== 'e8'); });
   a[dt].N.push('e8');
-  const ngs = Solver.checkManual(data, a, 'e8', dt, 'N');
-  ok(true, '（参考）手動チェックが動作: ' + (ngs.length ? ngs[0].msg : '制限なし'));
+  // UIと同じく「その日の本人の割当を外した状態」で可否を尋ねる
+  const clean = JSON.parse(JSON.stringify(res.assignments));
+  Object.keys(clean[dt] || {}).forEach(k => { clean[dt][k] = clean[dt][k].filter(x => x !== 'e8'); });
+  const ngs = Solver.checkManual(data, clean, 'e8', dt, 'N');
+  ok(ngs.some(n => n.ruleId === 'LAW-040'), '手動で18歳未満を夜勤に入れようとすると警告される',
+    ngs.map(n => n.ruleId).join(','));
   const rv = Solver.revalidate(data, a);
-  ok(rv.violations.length >= res.violations.length, '手動編集後に再検証が働く');
+  ok(rv.violations.some(v => v.ruleId === 'LAW-040' && v.level === 'hard'),
+    '警告を無視して入れた場合、再検証で法令違反として検出される',
+    rv.violations.filter(v => v.level === 'hard').map(v => v.ruleId).join(','));
   ok(typeof rv.totalPay === 'number', '人件費が再計算される');
+
+  // 担当できない勤務区分に手で入れた場合
+  const a2 = JSON.parse(JSON.stringify(res.assignments));
+  const dt2 = dates[12];
+  Object.keys(a2[dt2] || {}).forEach(k => { a2[dt2][k] = a2[dt2][k].filter(x => x !== 'e5'); });
+  if (!a2[dt2]) a2[dt2] = {};
+  (a2[dt2].N = a2[dt2].N || []).push('e5');            // 伊藤は夜勤を担当できない設定
+  const rv2 = Solver.revalidate(data, a2);
+  ok(rv2.violations.some(v => v.ruleId === 'OPS-008'), '担当できない勤務区分への手動割当を検出する',
+    rv2.violations.filter(v => v.level === 'hard').map(v => v.ruleId).join(','));
+}
+
+/* =======================================================================
+   シナリオ13：壊れたデータ・参照切れからの復帰
+   ======================================================================= */
+T('シナリオ13：従業員/勤務区分を削除したときに関連データが残らない');
+{
+  const { data, res } = run(baseData());
+  Store.get().assignments = res.assignments;
+  Store.get().requests = { e5: { '2026-08-03': 'off' } };
+  Store.get().avail = { e5: { '2026-08-03': { allday: true } } };
+  Store.get().submissions = { e5: { status: 'submitted', at: 'x' } };
+  Store.get().employees.find(e => e.id === 'e4').ngPartners = ['e5'];
+
+  Store.removeEmployee('e5');
+  const d2 = Store.get();
+  const stillInShift = Object.keys(d2.assignments).some(dt =>
+    Object.keys(d2.assignments[dt]).some(st => d2.assignments[dt][st].indexOf('e5') >= 0));
+  ok(!stillInShift, '削除した人が作成済みシフトに残らない');
+  ok(!d2.requests.e5 && !d2.avail.e5 && !d2.submissions.e5, '希望・提出データも消える');
+  ok(d2.employees.find(e => e.id === 'e4').ngPartners.indexOf('e5') < 0, '他の人の相性設定からも消える');
+
+  Store.removeShiftType('N');
+  const d3 = Store.get();
+  const stillHasN = Object.keys(d3.assignments).some(dt => d3.assignments[dt].N);
+  ok(!stillHasN, '削除した勤務区分が作成済みシフトに残らない');
+  ok(!d3.demand.byWeekday.N, '必要人数の設定からも消える');
+  ok(d3.employees.every(e => e.canShift.indexOf('N') < 0), '各人の担当可能区分からも消える');
+  ok(Solver.generate(d3).violations.filter(v => v.level === 'hard').length >= 0, '削除後も生成できる');
+}
+
+T('シナリオ14：壊れた保存データ・不正な入力値でも落ちない');
+{
+  [{}, { employees: [], shiftTypes: [] }, { settings: 'x', employees: [{}], shiftTypes: [{}] },
+  { settings: { year: 99999, month: 77 }, employees: [{ name: 'A', wage: -5, maxDays: 'abc' }], shiftTypes: [{ start: 'xx', end: null }] }
+  ].forEach((broken, i) => {
+    let okRun = true, msg = '';
+    try {
+      Store.setData(JSON.parse(JSON.stringify(broken)));
+      const d = Store.get();
+      const r = Solver.generate(d);
+      if (!(d.settings.year >= 2000 && d.settings.month >= 1 && d.settings.month <= 12)) { okRun = false; msg = '年月が補正されていない'; }
+      if (d.employees.some(e => e.wage < 0 || isNaN(e.maxDays))) { okRun = false; msg = '不正な数値が残っている'; }
+      if (!r || !Array.isArray(r.violations)) { okRun = false; msg = '生成結果が不正'; }
+    } catch (e) { okRun = false; msg = e.message; }
+    ok(okRun, `壊れたデータ#${i + 1} を補正して動作する`, msg);
+  });
+
+  // JSON読み込み失敗時に現在のデータを壊さない
+  Store.setData(baseData());
+  const before = Store.get().employees.length;
+  let threw = false;
+  try { Store.importJson('{"foo":1}'); } catch (e) { threw = true; }
+  ok(threw, '不正なJSONの読み込みは例外になる');
+  ok(Store.get().employees.length === before, '読み込み失敗しても現在のデータが壊れない');
 }
 
 /* ---------------- 結果 ---------------- */

@@ -109,3 +109,30 @@ details.rule summary{cursor:pointer;font-weight:700}
 .muted{color:var(--muted)}
 .right{text-align:right}
 .nowrap{white-space:nowrap}
+
+/* ===== スマホ（スタッフが希望を提出する画面を想定） ===== */
+@media (max-width: 700px){
+  main{padding:10px}
+  .app-header{padding:10px 12px}
+  .app-header h1{font-size:15px}
+  .card{padding:12px}
+  .tabs{padding:8px 8px 0}
+  .tab{padding:8px 10px;font-size:13px}
+  .btn.big{width:100%;padding:14px;font-size:16px}
+  .field input,.field select{font-size:16px;padding:10px}  /* iOSの自動ズーム防止 */
+  .row{gap:8px}
+
+  /* 提出画面は表ではなく「1日 = 1カード」に切り替える */
+  .staff-table{max-height:none !important;border:none;overflow:visible}
+  .staff-table table,.staff-table tbody,.staff-table tr,.staff-table td{display:block;width:100%}
+  .staff-table thead{display:none}
+  .staff-table tr.day-row{
+    border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:8px 10px;background:var(--bg)}
+  .staff-table td{border:none;padding:4px 0;display:flex;align-items:center;gap:8px}
+  .staff-table td::before{
+    content:attr(data-label);flex:0 0 92px;font-size:12px;font-weight:700;color:var(--muted)}
+  .staff-table td.daycell{font-size:16px;font-weight:800;padding-bottom:6px;border-bottom:1px dashed var(--line);margin-bottom:4px}
+  .staff-table td.daycell::before{display:none}
+  .staff-table select,.staff-table input{flex:1;min-width:0;padding:9px;font-size:15px}
+  .staff-table td.sun{color:var(--ng)} .staff-table td.sat{color:var(--accent)}
+}
