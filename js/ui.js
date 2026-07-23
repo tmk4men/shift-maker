@@ -6,14 +6,22 @@
   var staffView = '';     // 提出画面を開いている従業員ID
   var staffPage = '';     // スタッフ専用モードの表示（shift = 自分のシフト / submit = 希望提出）
 
-  /* スタッフ専用モード：?staff=従業員ID で開くと提出画面だけになる（管理操作は出さない） */
-  var staffOnly = '', inputMode = false;
+  /* 使う人のモード（URLではなく画面で切り替える）
+     input  … スタッフが自分の希望を入力する画面
+     manage … 責任者がシフトを作る画面 */
+  var mode = 'manage';
   try {
-    var q = (typeof location !== 'undefined' && location.search) ? location.search : '';
-    var m = q.match(/[?&]staff=([^&]+)/);
-    if (m) staffOnly = decodeURIComponent(m[1]);
-    inputMode = /[?&]input=1/.test(q);
-  } catch (err) { staffOnly = ''; inputMode = false; }
+    if (typeof localStorage !== 'undefined') {
+      var m0 = localStorage.getItem('shift-maker-mode');
+      if (m0 === 'input' || m0 === 'manage') mode = m0;
+    }
+  } catch (err) { mode = 'manage'; }
+
+  function setMode(next) {
+    mode = next;
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem('shift-maker-mode', next); } catch (e) { }
+    render();
+  }
 
 
 
@@ -284,6 +292,8 @@
     ]);
     det.appendChild(el('div', { class: 'scroll', style: 'max-height:340px;margin-top:8px' }, [ovTable]));
     p.appendChild(card('特定日の調整', null, [det]));
+
+    renderRules();   // 詳しいルール設定は、このタブの末尾に畳んで置く
   }
 
   /* ================= ② 従業員 ================= */
@@ -475,7 +485,7 @@
         }),
         el('button', { class: 'btn ghost', text: '希望ファイルを読み込む', onclick: function () { document.getElementById('fileRequests').click(); } }),
         el('button', { class: 'btn ghost', text: 'コードを貼り付けて取り込む', onclick: importCodeDialog }),
-        el('button', { class: 'btn ghost', text: 'スタッフ用の入力ページ', onclick: showInputPageLink })
+        el('button', { class: 'btn ghost', text: 'スタッフへの渡し方', onclick: showHowToCollect })
       ]),
       el('div', { class: 'scroll' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['氏名', '入力状況', ''].map(function (h) { return el('th', { text: h }); }))]),
@@ -508,51 +518,31 @@
     ]));
   }
 
-  function showStaffLink(e) {
-    var base = '';
-    try { base = (typeof location !== 'undefined') ? (location.origin + location.pathname) : 'index.html'; }
-    catch (err) { base = 'index.html'; }
-    var url = base + '?staff=' + encodeURIComponent(e.id);
-    var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:70px;font-family:monospace;font-size:12px' });
-    ta.value = url;
-    var b = el('div', {}, [
-      el('p', { class: 'hint', text: 'このURLを開くと、' + e.name + ' さんの希望提出画面だけが表示されます（管理用の設定は出ません）。' }),
-      ta,
-      el('p', { class: 'hint', style: 'margin-top:10px', text: '※ 別の端末とはデータを共有しません。スタッフのスマホで入力してもらう場合は［スタッフ用の入力ページ］を使ってください。' })
-    ]);
-    modal('スタッフ用リンク', b, [
-      el('button', {
-        class: 'btn', text: 'コピーする', onclick: function () {
-          try {
-            if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(url);
-            toast('コピーしました');
-          } catch (err2) { toast('コピーできませんでした'); }
-        }
-      }),
-      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
-    ]);
-  }
+  /** スタッフにどう入力してもらうかの案内 */
+  function showHowToCollect() {
+    var url = '';
+    try { url = (typeof location !== 'undefined') ? (location.origin + location.pathname) : ''; } catch (e) { url = ''; }
+    var ta = url ? el('textarea', { readonly: 'readonly', style: 'width:100%;height:56px;font-family:monospace;font-size:12px' }) : null;
+    if (ta) ta.value = url;
 
-  /** スタッフに配る入力ページのURL */
-  function showInputPageLink() {
-    var base = '';
-    try { base = (typeof location !== 'undefined') ? (location.origin + location.pathname) : 'index.html'; }
-    catch (err) { base = 'index.html'; }
-    var url = base + '?input=1';
-    var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:60px;font-family:monospace;font-size:12px' });
-    ta.value = url;
-    modal('スタッフ用の入力ページ', el('div', {}, [
-      el('p', { class: 'hint', text: 'このURLをスタッフに送ると、名前と行ける日時を入力してファイルを作れます。それを［希望ファイルを読み込む］で取り込みます（何人分でも一度に）。' }),
-      ta
-    ]), [
-      el('button', {
-        class: 'btn', text: 'コピー', onclick: function () {
+    modal('スタッフへの渡し方', el('div', {}, [
+      el('p', {}, [el('strong', { text: 'スタッフにやってもらうこと' })]),
+      el('p', { class: 'hint', text: '1. このアプリを開く' }),
+      el('p', { class: 'hint', text: '2. 上の［シフト希望を出す］を押す' }),
+      el('p', { class: 'hint', text: '3. 名前と、行ける日・時間を入れる' }),
+      el('p', { class: 'hint', text: '4. ［ファイルに保存］か［コードでコピー］' }),
+      el('p', { class: 'hint', text: '5. できたものをLINEなどで責任者に送る' }),
+      el('p', { style: 'margin-top:16px' }, [el('strong', { text: '責任者がやること' })]),
+      el('p', { class: 'hint', text: '受け取ったファイルを［希望ファイルを読み込む］、コードなら［コードを貼り付けて取り込む］。何人分でも一度に取り込めます。' })
+    ].concat(ta ? [el('p', { style: 'margin-top:16px' }, [el('strong', { text: 'アプリのURL' })]), ta] : [])), [
+      ta ? el('button', {
+        class: 'btn', text: 'URLをコピー', onclick: function () {
           try { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(url); toast('コピーしました'); }
           catch (e) { toast('コピーできませんでした'); }
         }
-      }),
+      }) : null,
       el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
-    ]);
+    ].filter(Boolean));
   }
 
   /** 希望ファイルをまとめて読み、誰のものかを確認してから取り込む */
@@ -787,7 +777,6 @@
           };
           Store.save();
           toast(e.name + 'さんの希望を保存しました');
-          if (staffOnly) { render(); return; }
           staffView = ''; render();
         }
       }),
@@ -795,7 +784,7 @@
         class: 'btn ghost', text: '提出コードをコピー', title: '別の端末で入力した場合、このコードを責任者に送ってください',
         onclick: function () { showSubmissionCode(e); }
       }),
-      staffOnly ? null : el('button', { class: 'btn ghost', text: '閉じる', onclick: function () { staffView = ''; render(); } })
+      el('button', { class: 'btn ghost', text: '閉じる', onclick: function () { staffView = ''; render(); } })
     ];
 
     var sub = Store.submissionOf(e.id);
@@ -1370,9 +1359,9 @@
     ]));
   }
 
-  /* ================= ⑥ ルール設定 ================= */
+  /* ================= ルール設定（「準備」タブの末尾） ================= */
   function renderRules() {
-    var p = document.getElementById('panel-rules'); p.innerHTML = '';
+    var p = document.getElementById('panel-setup');
     var groups = { law: [], ops: [] };
     Rules.DEFS.forEach(function (d) { groups[d.cat].push(d); });
 
@@ -1401,6 +1390,13 @@
       ]);
     }
 
+    var wrap = el('details', { class: 'rule' }, [
+      el('summary', { text: '詳しいルール設定（ふだんは触らなくて大丈夫です）' })
+    ]);
+    var host = el('div', { style: 'margin-top:12px' }, []);
+    wrap.appendChild(host);
+    p.appendChild(el('div', { class: 'card' }, [wrap]));
+
     /* かんたん設定（プリセット） */
     var PRESETS = {
       balanced: { label: 'バランス重視', desc: '希望と公平性のバランス（初期設定）', w: {} },
@@ -1408,7 +1404,7 @@
       fair: { label: '公平重視', desc: '夜勤・土日・労働時間の偏りを最小に', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
       cost: { label: '人件費重視', desc: '単価の高い人の投入を抑える（予算設定が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
     };
-    p.appendChild(card('かんたん設定', '方針を選ぶと、下の重みがまとめて変わります。', [
+    host.appendChild(card('かんたん設定', '方針を選ぶと、下の重みがまとめて変わります。', [
       el('div', { class: 'row' }, Object.keys(PRESETS).map(function (k) {
         var ps = PRESETS[k];
         return el('button', {
@@ -1427,8 +1423,8 @@
       el('p', { class: 'hint', style: 'margin-top:8px', text: '法令ルールはどの設定でも守られます。' })
     ]));
 
-    p.appendChild(card('法令ルール（変更不可）', '労働基準法などに基づく制約です。', groups.law.map(ruleRow)));
-    p.appendChild(card('運用ルール', '現場に合わせて調整できます。', groups.ops.map(ruleRow)));
+    host.appendChild(card('法令ルール（変更不可）', '労働基準法などに基づく制約です。', groups.law.map(ruleRow)));
+    host.appendChild(card('運用ルール', '現場に合わせて調整できます。', groups.ops.map(ruleRow)));
   }
 
   function setRule(id, patch) {
@@ -1465,18 +1461,8 @@
   }
 
   function renderInputPage() {
-    var tabsEl = document.getElementById('tabs');
-    if (tabsEl && tabsEl.style) tabsEl.style.display = 'none';
-    var ha = document.querySelector ? document.querySelector('.header-actions') : null;
-    if (ha && ha.style) ha.style.display = 'none';
-    ['setup', 'staff', 'shift', 'summary', 'rules'].forEach(function (n) {
-      var pn = document.getElementById('panel-' + n);
-      if (pn) { pn.innerHTML = ''; pn.classList.add('hidden'); }
-    });
-
     var dr = loadDraft();
-    var p = document.getElementById('panel-request');
-    p.classList.remove('hidden');
+    var p = document.getElementById('panel-input');
     p.innerHTML = '';
 
     var dates = U.monthDates(dr.year, dr.month);
@@ -1616,113 +1602,25 @@
     ]);
   }
 
-  /* ================= スタッフ専用モード（?staff=従業員ID） ================= */
-  function renderStaffOnly() {
-    // 管理用のタブ・操作を隠す
-    var tabsEl = document.getElementById('tabs');
-    if (tabsEl && tabsEl.style) tabsEl.style.display = 'none';
-    var ha = document.querySelector ? document.querySelector('.header-actions') : null;
-    if (ha && ha.style) ha.style.display = 'none';
-    ['setup', 'staff', 'shift', 'summary', 'rules'].forEach(function (n) {
+  /* ================= モード・タブ・初期化 ================= */
+
+  /** モードに合わせて、タブ列と各パネルの表示を切り替える */
+  function syncMode() {
+    var isInput = (mode === 'input');
+    Array.prototype.forEach.call(document.querySelectorAll('.mode'), function (b) {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    var tabs = document.getElementById('tabs');
+    if (tabs && tabs.style) tabs.style.display = isInput ? 'none' : '';
+
+    var inputPanel = document.getElementById('panel-input');
+    if (inputPanel) inputPanel.classList.toggle('hidden', !isInput);
+    ['setup', 'staff', 'request', 'shift', 'summary'].forEach(function (n) {
       var pn = document.getElementById('panel-' + n);
-      if (pn) { pn.innerHTML = ''; pn.classList.add('hidden'); }
+      if (pn) pn.classList.toggle('hidden', isInput || n !== currentTab);
     });
-
-    var p = document.getElementById('panel-request');
-    p.classList.remove('hidden');
-    p.innerHTML = '';
-    var e = Store.empById(staffOnly);
-    if (!e) {
-      p.appendChild(card('スタッフが見つかりません',
-        'このリンクの従業員（' + staffOnly + '）は登録されていません。責任者にリンクを確認してください。', []));
-      return;
-    }
-
-    // シフトが出来ていればそちらを先に見せる（スタッフが一番知りたいのは「自分がいつ入るか」）
-    var mine = myShifts(e.id);
-    if (!staffPage) staffPage = mine.length ? 'shift' : 'submit';
-
-    p.appendChild(el('div', { class: 'row', style: 'margin-bottom:12px' }, [
-      el('button', {
-        class: 'btn ' + (staffPage === 'shift' ? '' : 'ghost'), text: '自分のシフト' + (mine.length ? '（' + mine.length + '日）' : ''),
-        onclick: function () { staffPage = 'shift'; render(); }
-      }),
-      el('button', {
-        class: 'btn ' + (staffPage === 'submit' ? '' : 'ghost'), text: '希望を出す',
-        onclick: function () { staffPage = 'submit'; render(); }
-      })
-    ]));
-
-    if (staffPage === 'shift') p.appendChild(myShiftCard(e, mine));
-    else p.appendChild(staffSubmitCard(e, Store.monthDates()));
   }
 
-  /** その人の今月の勤務を並べる */
-  function myShifts(empId) {
-    return Store.monthDates().map(function (date) {
-      var stId = shiftOfEmp(empId, date);
-      if (!stId) return null;
-      var st = Store.stById(stId);
-      if (!st) return null;
-      return { date: date, st: st, calc: Store.stCalc(st) };
-    }).filter(Boolean);
-  }
-
-  function myShiftCard(e, mine) {
-    if (!mine.length) {
-      return card(e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）', '', [
-        el('p', { text: 'この月のシフトはまだ出ていません。' }),
-        el('p', { class: 'hint', text: '責任者がシフトを作成すると、このページに表示されます。先に「希望を出す」から希望を提出しておいてください。' })
-      ]);
-    }
-
-    var totalMin = mine.reduce(function (a, m) { return a + m.calc.work; }, 0);
-    var nights = mine.filter(function (m) { return m.calc.night > 0; }).length;
-
-    var rows = mine.map(function (m) {
-      var w = U.weekdayOf(m.date);
-      var end = m.calc.overnight ? m.st.end + '（翌日）' : m.st.end;
-      return el('tr', { class: 'day-row' }, [
-        el('td', {
-          class: 'daycell ' + (w === 0 || Store.isHoliday(m.date) ? 'sun' : w === 6 ? 'sat' : ''),
-          'data-label': '日付', text: (+m.date.slice(8)) + '日（' + U.WD[w] + '）'
-        }),
-        el('td', { 'data-label': '勤務' }, [
-          el('span', { class: 'chip', style: 'background:' + m.st.color + '55;border-color:' + m.st.color + ';color:inherit', text: m.st.name })
-        ]),
-        el('td', { 'data-label': '時間', text: m.st.start + ' 〜 ' + end }),
-        el('td', { 'data-label': '休憩', text: m.st.breakMin + '分' }),
-        el('td', { 'data-label': '実働', text: U.min2h(m.calc.work) + 'h' })
-      ]);
-    });
-
-    return card(e.name + ' さんのシフト（' + D.settings.year + '年' + D.settings.month + '月）',
-      null, [
-      el('div', { class: 'grid2', style: 'margin-bottom:12px' }, [
-        stat('出勤日数', mine.length + ' 日'),
-        stat('実働時間', U.min2h(totalMin) + ' h'),
-        nights ? stat('夜勤', nights + ' 回') : null,
-        stat('次の出勤', nextShiftLabel(mine))
-      ].filter(Boolean)),
-      el('div', { class: 'scroll staff-table', style: 'max-height:60vh' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['日付', '勤務', '時間', '休憩', '実働'].map(function (h) { return el('th', { text: h }); }))]),
-        el('tbody', {}, rows)
-      ])]),
-      el('div', { class: 'row', style: 'margin-top:12px' }, [
-        el('button', { class: 'btn ghost', text: '印刷', onclick: function () { if (typeof window !== 'undefined' && window.print) window.print(); } })
-      ])
-    ]);
-  }
-
-  function nextShiftLabel(mine) {
-    var t = new Date();
-    var today = t.getFullYear() + '-' + U.pad(t.getMonth() + 1) + '-' + U.pad(t.getDate());
-    var next = mine.filter(function (m) { return m.date >= today; })[0];
-    if (!next) return 'なし';
-    return (+next.date.slice(5, 7)) + '/' + (+next.date.slice(8)) + ' ' + next.st.name;
-  }
-
-  /* ================= タブ・初期化 ================= */
   function switchTab(name) {
     currentTab = name;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
@@ -1736,8 +1634,8 @@
 
   function render() {
     D = Store.get();
-    if (inputMode) return renderInputPage();
-    if (staffOnly) return renderStaffOnly();
+    syncMode();
+    if (mode === 'input') { renderInputPage(); return; }
 
 
     if (currentTab === 'setup') renderSetup();
@@ -1745,13 +1643,20 @@
     if (currentTab === 'request') renderRequest();
     if (currentTab === 'shift') renderShift();
     if (currentTab === 'summary') renderSummary();
-    if (currentTab === 'rules') renderRules();
 
     // どのタブでも先頭に「いまどこまで進んでいるか」を出す
     var p = document.getElementById('panel-' + currentTab);
+    if (!p) return;
     if (p && p.insertBefore && p.children && p.children.length) p.insertBefore(guideBar(), p.children[0]);
     else if (p) p.appendChild(guideBar());
   }
+
+  var modesEl = document.getElementById('modes');
+  if (modesEl) modesEl.addEventListener('click', function (e) {
+    var t = e.target;
+    while (t && !t.dataset.mode) t = t.parentNode;
+    if (t && t.dataset.mode) setMode(t.dataset.mode);
+  });
 
   document.getElementById('tabs').addEventListener('click', function (e) {
     if (e.target.classList.contains('tab')) switchTab(e.target.dataset.tab);

@@ -58,22 +58,32 @@
   </div>
 </header>
 
+<nav class="modes" id="modes" aria-label="使う人を選ぶ">
+  <button class="mode" data-mode="input">
+    <span class="mode-t">シフト希望を出す</span>
+    <span class="mode-s">スタッフの方はこちら</span>
+  </button>
+  <button class="mode active" data-mode="manage">
+    <span class="mode-t">シフトを作る</span>
+    <span class="mode-s">責任者の方はこちら</span>
+  </button>
+</nav>
+
 <nav class="tabs" id="tabs">
-  <button class="tab active" data-tab="setup">① 基本設定</button>
-  <button class="tab" data-tab="staff">② 従業員</button>
-  <button class="tab" data-tab="request">③ 希望を入れる</button>
-  <button class="tab" data-tab="shift">④ シフト表</button>
-  <button class="tab" data-tab="summary">⑤ 集計</button>
-  <button class="tab" data-tab="rules">⑥ ルール設定</button>
+  <button class="tab active" data-tab="setup">1. 準備</button>
+  <button class="tab" data-tab="staff">2. スタッフ</button>
+  <button class="tab" data-tab="request">3. 希望を集める</button>
+  <button class="tab" data-tab="shift">4. シフト表</button>
+  <button class="tab" data-tab="summary">5. 集計</button>
 </nav>
 
 <main id="main">
+  <section class="panel hidden" id="panel-input"></section>
   <section class="panel" id="panel-setup"></section>
   <section class="panel hidden" id="panel-staff"></section>
   <section class="panel hidden" id="panel-request"></section>
   <section class="panel hidden" id="panel-shift"></section>
   <section class="panel hidden" id="panel-summary"></section>
-  <section class="panel hidden" id="panel-rules"></section>
 </main>
 
 <div id="modal" class="modal hidden">
