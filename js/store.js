@@ -24,9 +24,9 @@ var Store = (function () {
     var y = now.getFullYear(), m = now.getMonth() + 1;
 
     var shiftTypes = [
-      { id: 'A', name: '早番', short: '早', start: '08:00', end: '17:00', breakMin: 60, color: '#f6c453' },
-      { id: 'B', name: '遅番', short: '遅', start: '13:00', end: '22:00', breakMin: 60, color: '#7fb3f5' },
-      { id: 'N', name: '夜勤', short: '夜', start: '22:00', end: '07:00', breakMin: 90, color: '#9b8cf0' }
+      { id: 'A', name: '早番', short: '早', start: '08:00', end: '17:00', breakMin: 60, color: '#e5b978' },
+      { id: 'B', name: '遅番', short: '遅', start: '13:00', end: '22:00', breakMin: 60, color: '#8fb2d8' },
+      { id: 'N', name: '夜勤', short: '夜', start: '22:00', end: '07:00', breakMin: 90, color: '#a89ad0' }
     ];
 
     function emp(o) {
@@ -340,13 +340,40 @@ var Store = (function () {
       avail: d.avail[empId] || {}, requests: d.requests[empId] || {}
     };
   }
-  function importSubmission(obj) {
+  /** 氏名のゆらぎを吸収して照合するための正規化（空白・全角半角） */
+  function normName(x) {
+    return String(x || '').replace(/[\s　]/g, '').toLowerCase();
+  }
+  /** 希望データに一致しそうな従業員を推測する（見つからなければ null） */
+  function guessEmployee(obj) {
+    var d = get();
+    if (obj && obj.id) { var byId = empById(obj.id); if (byId) return byId; }
+    var n = normName(obj && obj.name);
+    if (!n) return null;
+    return d.employees.filter(function (x) { return normName(x.name) === n; })[0] || null;
+  }
+  /** 従業員を新規追加して返す */
+  function addEmployee(name) {
+    var d = get();
+    var e = U.clone(sampleData().employees[0]);
+    e.id = U.uid('e');
+    e.name = name || '新しい従業員';
+    e.leader = false; e.certified = false; e.trainer = false; e.newbie = false; e.minor = false;
+    e.priority = 0; e.minDays = 0; e.maxDays = 20; e.maxConsecutive = 5;
+    e.maxHoursMonth = 0; e.maxNights = 0; e.weeklyHoursCap = 0;
+    e.incomeCap = 0; e.ytdEarnings = 0; e.note = '';
+    e.ngPartners = []; e.goodPartners = []; e.trainerId = ''; e.ngWeekdays = [];
+    e.canShift = d.shiftTypes.map(function (s) { return s.id; });
+    d.employees.push(e);
+    save();
+    return e;
+  }
+
+  /** 希望データを取り込む。forceEmpId を渡すとその人に確定で入れる（プルダウン選択用） */
+  function importSubmission(obj, forceEmpId) {
     var d = get();
     if (!obj || obj.t !== 'shift-submission') throw new Error('シフト希望のデータではありません');
-    // ID優先、なければ氏名で照合（空白の違いは無視する）
-    function norm(x) { return String(x || '').replace(/[\s　]/g, ''); }
-    var e = (obj.id ? empById(obj.id) : null)
-      || d.employees.filter(function (x) { return norm(x.name) === norm(obj.name); })[0];
+    var e = forceEmpId ? empById(forceEmpId) : guessEmployee(obj);
     if (!e) throw new Error('「' + (obj.name || '?') + '」は従業員に登録されていません（先に②で登録してください）');
     var ym = d.settings.year + '-' + U.pad(d.settings.month);
     if (obj.ym && obj.ym !== ym) throw new Error('対象月が違います（提出コードは ' + obj.ym + '）');
@@ -429,6 +456,7 @@ var Store = (function () {
     exportJson: exportJson, importJson: importJson, sampleData: sampleData,
     removeEmployee: removeEmployee, removeShiftType: removeShiftType,
     exportSubmission: exportSubmission, importSubmission: importSubmission, onSaveError: onSaveError,
+    guessEmployee: guessEmployee, addEmployee: addEmployee,
     stCalc: stCalc, empById: empById, stById: stById, monthDates: monthDates,
     needOf: needOf, assignedOf: assignedOf, requestOf: requestOf,
     availOf: availOf, setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,

@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>シフト自動作成｜労働基準法と現場ルールで組むシフト作成アプリ</title>
 <meta name="description" content="労働基準法と現場の運用ルールに従って、シフトを自動で作成します。AIは使わないルールブック方式で、同じ入力なら必ず同じ結果。データはブラウザ内だけで完結します。">
-<meta name="theme-color" content="#111111">
+<meta name="theme-color" content="#f7f5f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#211f1c" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="https://tmk4men.github.io/shift-maker/">
 
 <!-- OGP -->
@@ -36,7 +37,13 @@
 
 <header class="app-header">
   <div class="brand">
-    <span class="logo">🗓️</span>
+    <span class="logo" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 64 64">
+        <rect x="14" y="17" width="9" height="8" rx="2"/><rect x="27.5" y="17" width="9" height="8" rx="2" opacity=".45"/><rect x="41" y="17" width="9" height="8" rx="2"/>
+        <rect x="14" y="28" width="9" height="8" rx="2" opacity=".45"/><rect x="27.5" y="28" width="9" height="8" rx="2"/><rect x="41" y="28" width="9" height="8" rx="2" opacity=".45"/>
+        <rect x="14" y="39" width="9" height="8" rx="2"/><rect x="27.5" y="39" width="9" height="8" rx="2" opacity=".45"/><rect x="41" y="39" width="9" height="8" rx="2"/>
+      </svg>
+    </span>
     <div>
       <h1>シフト自動作成</h1>
       <p class="sub">ルールブック方式・AI不使用・ブラウザ内で完結</p>
@@ -54,7 +61,7 @@
 <nav class="tabs" id="tabs">
   <button class="tab active" data-tab="setup">① 基本設定</button>
   <button class="tab" data-tab="staff">② 従業員</button>
-  <button class="tab" data-tab="request">③ 希望・提出</button>
+  <button class="tab" data-tab="request">③ 希望を入れる</button>
   <button class="tab" data-tab="shift">④ シフト表</button>
   <button class="tab" data-tab="summary">⑤ 集計</button>
   <button class="tab" data-tab="rules">⑥ ルール設定</button>

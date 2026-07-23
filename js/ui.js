@@ -503,53 +503,113 @@
     ]);
   }
 
-  /** 希望ファイルをまとめて取り込む */
+  /** 希望ファイルをまとめて読み、誰のものかを確認してから取り込む */
   function importRequestFiles(files) {
-    var okList = [], ngList = [], pending = files.length;
+    var items = [], ngList = [], pending = files.length;
     if (!pending) return;
     Array.prototype.forEach.call(files, function (f) {
       var r = new FileReader();
       r.onload = function () {
-        try {
-          var emp = Store.importSubmission(decodeCode(r.result));
-          okList.push(emp.name);
-        } catch (err) {
-          ngList.push(f.name + '：' + err.message);
-        }
-        if (--pending === 0) finish();
+        try { items.push({ src: f.name, obj: decodeCode(r.result) }); }
+        catch (err) { ngList.push(f.name + '：' + err.message); }
+        if (--pending === 0) showAssignDialog(items, ngList);
       };
-      r.onerror = function () { ngList.push(f.name + '：読めませんでした'); if (--pending === 0) finish(); };
+      r.onerror = function () { ngList.push(f.name + '：読めませんでした'); if (--pending === 0) showAssignDialog(items, ngList); };
       r.readAsText(f);
     });
+  }
 
-    function finish() {
-      D = Store.get(); render();
-      if (ngList.length) {
-        modal('読み込み結果', el('div', {}, [
-          okList.length ? el('p', { text: '取り込めた人：' + okList.join('、') }) : null,
-          el('h4', { text: '取り込めなかったファイル', style: 'margin-top:10px' })
-        ].concat(ngList.map(function (m) { return el('div', { class: 'vd', text: '・' + m }); }))),
-          [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
-      } else {
-        toast(okList.length + '人分の希望を取り込みました（' + okList.join('、') + '）');
-      }
+  /** 「これは誰の希望か」をプルダウンで確認してから取り込む画面 */
+  function showAssignDialog(items, ngList) {
+    ngList = ngList || [];
+    if (!items.length) {
+      modal('読み込み結果', el('div', {}, ngList.map(function (m) {
+        return el('div', { class: 'vd', text: '・' + m });
+      })), [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
+      return;
     }
+
+    var ym = D.settings.year + '-' + U.pad(D.settings.month);
+    var rows = items.map(function (it, i) {
+      var guess = Store.guessEmployee(it.obj);
+      it.targetId = guess ? guess.id : '__new__';
+
+      var opts = [{ v: '__new__', t: '＋ 新しく登録する（' + (it.obj.name || '名前なし') + '）' }]
+        .concat(D.employees.map(function (e) { return { v: e.id, t: e.name }; }));
+      var sel = select(opts, it.targetId, function (ev) { it.targetId = ev.target.value; });
+
+      var days = Object.keys(it.obj.avail || {}).length;
+      var monthNg = it.obj.ym && it.obj.ym !== ym;
+      it.skip = monthNg;
+
+      return el('tr', {}, [
+        el('td', {}, [
+          el('strong', { text: it.obj.name || '（名前なし）' }),
+          el('div', { class: 'vd', text: it.src })
+        ]),
+        el('td', { class: 'nowrap', text: (it.obj.ym || '?') + '　' + days + '日分' }),
+        el('td', {}, monthNg
+          ? [el('span', { class: 'badge ng', text: '対象月が違うため取り込みません' })]
+          : [sel])
+      ]);
+    });
+
+    var body = el('div', {}, [
+      el('p', { class: 'hint', text: 'これは誰の希望か確認してください。名前が一致した人は最初から選ばれています。' }),
+      el('table', {}, [
+        el('thead', {}, [el('tr', {}, ['データ', '対象月・件数', '誰の希望か'].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, rows)
+      ])
+    ].concat(ngList.length ? [el('h4', { text: '読めなかったもの', style: 'margin-top:12px' })]
+      .concat(ngList.map(function (m) { return el('div', { class: 'vd', text: '・' + m }); })) : []));
+
+    modal('希望の取り込み', body, [
+      el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal }),
+      el('button', {
+        class: 'btn', text: '取り込む', onclick: function () {
+          var done = [], failed = [];
+          items.forEach(function (it) {
+            if (it.skip) { failed.push((it.obj.name || it.src) + '：対象月が違います'); return; }
+            try {
+              var id = it.targetId;
+              if (id === '__new__') id = Store.addEmployee(it.obj.name || '新しい従業員').id;
+              var emp = Store.importSubmission(it.obj, id);
+              done.push(emp.name);
+            } catch (err) { failed.push((it.obj.name || it.src) + '：' + err.message); }
+          });
+          closeModal(); D = Store.get(); render();
+          if (failed.length) {
+            modal('取り込み結果', el('div', {}, [
+              done.length ? el('p', { text: '取り込めた人：' + done.join('、') }) : null,
+              el('h4', { text: '取り込めなかったもの', style: 'margin-top:10px' })
+            ].concat(failed.map(function (m) { return el('div', { class: 'vd', text: '・' + m }); }))),
+              [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
+          } else {
+            toast(done.length + '人分の希望を取り込みました（' + done.join('、') + '）');
+          }
+        }
+      })
+    ]);
   }
 
   function importCodeDialog() {
-    var ta = el('textarea', { placeholder: 'ここに提出コードを貼り付け', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
-    var msg = el('p', { class: 'hint', text: 'スタッフから受け取ったコードを貼り付けて［取り込む］を押してください。' });
-    modal('提出コードの取り込み', el('div', {}, [msg, ta]), [
+    var ta = el('textarea', { placeholder: 'ここにコードを貼り付け（複数人分を続けて貼ってもOK）', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
+    var msg = el('p', { class: 'hint', text: 'スタッフから受け取ったコードを貼り付けて［確認へ進む］を押してください。' });
+    modal('コードの取り込み', el('div', {}, [msg, ta]), [
       el('button', {
-        class: 'btn', text: '取り込む', onclick: function () {
-          try {
-            var emp = Store.importSubmission(decodeCode(ta.value));
-            closeModal(); D = Store.get(); render();
-            toast(emp.name + 'さんの希望を取り込みました');
-          } catch (err) {
-            msg.textContent = '取り込めませんでした：' + err.message;
-            msg.className = 'hint';
-          }
+        class: 'btn', text: '確認へ進む', onclick: function () {
+          // 改行区切りで複数貼られても拾えるようにする
+          var chunks = String(ta.value || '').split(/\s*\n\s*\n\s*|\s*\n(?=SHIFT[01]:)/)
+            .map(function (x) { return x.trim(); }).filter(Boolean);
+          if (!chunks.length) { msg.textContent = 'コードが入力されていません'; return; }
+          var items = [], ng = [];
+          chunks.forEach(function (c, i) {
+            try { items.push({ src: 'コード' + (i + 1), obj: decodeCode(c) }); }
+            catch (err) { ng.push('コード' + (i + 1) + '：読み取れませんでした'); }
+          });
+          if (!items.length) { msg.textContent = '取り込めるコードがありませんでした'; return; }
+          closeModal();
+          showAssignDialog(items, ng);
         }
       }),
       el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
@@ -804,6 +864,9 @@
       ]));
     }
 
+    var zc = zeroDayCard();
+    if (zc) p.appendChild(zc);
+
     /* シフト表（人 × 日） */
     var thead = el('tr', {}, [el('th', { class: 'namecol', text: '氏名' })].concat(dates.map(function (d) {
       var w = U.weekdayOf(d);
@@ -818,7 +881,7 @@
         if (stId) {
           var st = Store.stById(stId);
           days++; mins += Store.stCalc(st).work;
-          td = el('td', { class: 'cell-shift', text: st.short || st.name, style: 'background:' + st.color + '33;color:inherit' });
+          td = el('td', { class: 'cell-shift', text: st.short || st.name, style: 'background:' + st.color + '4d;color:inherit' });
         } else {
           var req = Store.requestOf(e.id, d);
           td = el('td', { class: 'cell-shift empty ' + (REQ_CLASS[req] || ''), text: req ? REQ_LABEL[req] : '・' });
@@ -912,6 +975,40 @@
       });
 
     return out;
+  }
+
+  /** 今月まだ1日も入っていない人（希望の取り込み漏れに気づくため） */
+  function zeroDayStaff() {
+    var dates = Store.monthDates();
+    return D.employees.map(function (e) {
+      var days = dates.filter(function (d) { return shiftOfEmp(e.id, d); }).length;
+      if (days > 0) return null;
+      var inputDays = dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length;
+      var okDays = dates.filter(function (d) {
+        var av = Store.availOf(e.id, d);
+        return av && av !== false;
+      }).length;
+      var reason = inputDays === 0 ? '希望が未入力（取り込まれていません）'
+        : okDays === 0 ? '本人が全日「行けない」と入力'
+          : '希望はあるが、条件が合わず入りませんでした';
+      return { emp: e, reason: reason, inputDays: inputDays };
+    }).filter(Boolean);
+  }
+
+  function zeroDayCard() {
+    var zs = zeroDayStaff();
+    if (!zs.length) return null;
+    return card('今月シフトが0日の人（' + zs.length + '名）',
+      '希望の取り込み漏れがないか確認してください。', zs.map(function (z) {
+        return el('div', { class: 'violation ' + (z.inputDays === 0 ? 'hard' : '') }, [
+          el('div', { class: 'vt', text: z.emp.name }),
+          el('div', { class: 'vd', text: z.reason }),
+          z.inputDays === 0 ? el('button', {
+            class: 'btn ghost sm', style: 'margin-top:4px',
+            text: 'この人の希望を入力する', onclick: function () { staffView = z.emp.id; switchTab('request'); }
+          }) : null
+        ]);
+      }));
   }
 
   function stat(k, v, cls) {
@@ -1106,6 +1203,9 @@
         el('tbody', {}, rows)
       ])])
     ]));
+
+    var zc2 = zeroDayCard();
+    if (zc2) p.appendChild(zc2);
 
     // 公平性
     var nights = D.employees.map(function (e) { return st[e.id].nights; });
@@ -1436,7 +1536,7 @@
           'data-label': '日付', text: (+m.date.slice(8)) + '日（' + U.WD[w] + '）'
         }),
         el('td', { 'data-label': '勤務' }, [
-          el('span', { class: 'chip', style: 'background:' + m.st.color + '55;border-color:' + m.st.color, text: m.st.name })
+          el('span', { class: 'chip', style: 'background:' + m.st.color + '55;border-color:' + m.st.color + ';color:inherit', text: m.st.name })
         ]),
         el('td', { 'data-label': '時間', text: m.st.start + ' 〜 ' + end }),
         el('td', { 'data-label': '休憩', text: m.st.breakMin + '分' }),

@@ -4,6 +4,6 @@
   "description": "ルールブック方式のシフト自動作成アプリ（AI不使用・ローカル完結）",
   "private": true,
   "scripts": {
-    "test": "node tests/test.js && node tests/ui-smoke.js"
+    "test": "node tests/test.js && node tests/ui-smoke.js && node tests/contrast.js"
   }
 }
