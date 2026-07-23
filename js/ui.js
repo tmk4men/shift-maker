@@ -906,7 +906,7 @@
       })).concat([el('td', {}), el('td', {})]));
     });
 
-    p.appendChild(card('シフト表', 'セルをクリックで変更できます。', [
+    p.appendChild(card('シフト表', 'セルをクリックすると、勤務の変更と「急に休むときの代わりさがし」ができます。', [
       el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [thead]), el('tbody', {}, rows.concat(needRows))])])
     ]));
   }
@@ -1040,6 +1040,16 @@
       req ? el('span', { class: 'chip', text: '希望：' + { off: '休み希望', must: '絶対休', paid: '有給', want: '出勤希望' }[req] }) : null
     ]));
 
+    // 急な欠勤への対応（いちばん使う操作なので最上部に出す）
+    if (cur) {
+      b.appendChild(el('div', { class: 'row', style: 'margin:16px 0' }, [
+        el('button', {
+          class: 'btn', text: 'この人が休む → 代わりを探す',
+          onclick: function () { absenceDialog(e, date, cur); }
+        })
+      ]));
+    }
+
     // 変更ボタン
     var btns = el('div', { class: 'row', style: 'margin:12px 0' }, D.shiftTypes.map(function (st) {
       var ngs = cur === st.id ? [] : Solver.checkManual(D, assignmentsWithout(e.id, date), e.id, date, st.id);
@@ -1104,6 +1114,96 @@
     }
 
     modal('勤務の変更', b, [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
+  }
+
+  /* ================= 欠員対応 ================= */
+  /** 「この人が急に休む」→ 代わりを4段階で提示する */
+  function absenceDialog(emp, date, stId) {
+    var st = Store.stById(stId);
+    var o = Solver.coverageOptions(D, D.assignments, date, stId, emp.id);
+    var w = U.WD[U.weekdayOf(date)];
+    var head = (+date.slice(5, 7)) + '月' + (+date.slice(8)) + '日（' + w + '）' + st.name;
+
+    function pickBtn(id, name, cls, confirmMsg) {
+      return el('button', {
+        class: 'btn ' + (cls || ''), text: name, onclick: function () {
+          if (confirmMsg && !confirm(confirmMsg)) return;
+          setCell(emp.id, date, '');      // 休む人を外す
+          setCell(id, date, stId);        // 代わりを入れる
+          closeModal();
+          toast(name + 'さんに交代しました');
+        }
+      });
+    }
+
+    var b = el('div', {}, []);
+    b.appendChild(el('p', { class: 'hint', text: head + '　' + emp.name + 'さんの代わりを探します。' }));
+
+    /* ① すぐ入れる */
+    b.appendChild(el('h4', { text: 'そのまま入れる人（' + o.ready.length + '名）' }));
+    if (o.ready.length) {
+      b.appendChild(el('div', { class: 'row', style: 'margin-bottom:4px' },
+        o.ready.slice(0, 8).map(function (c) { return pickBtn(c.empId, c.name); })));
+      o.ready.slice(0, 3).forEach(function (c) {
+        var r = c.why.map(function (x) { return x.label; }).filter(Boolean).join(' / ');
+        if (r) b.appendChild(el('div', { class: 'vd', text: '・' + c.name + '：' + r }));
+      });
+    } else {
+      b.appendChild(el('p', { class: 'vd', text: 'ルールを守ったまま入れる人はいません。下の候補から選んでください。' }));
+    }
+
+    /* ② 本人に確認すれば入れる */
+    if (o.askPerson.length) {
+      b.appendChild(el('h4', { text: '本人に聞けば入れるかもしれない人（' + o.askPerson.length + '名）' }));
+      b.appendChild(el('p', { class: 'vd', text: '本人の都合の問題だけです。電話して都合がつけば入れられます。' }));
+      o.askPerson.forEach(function (c) {
+        b.appendChild(el('div', { class: 'violation', style: 'margin-bottom:6px' }, [
+          el('div', { class: 'vt', text: c.name }),
+          el('div', { class: 'vd', text: c.reason }),
+          el('div', { style: 'margin-top:6px' }, [
+            pickBtn(c.empId, c.name, 'ghost sm', c.name + 'さんに確認は取れましたか？\n（' + c.reason + '）')
+          ])
+        ]));
+      });
+    }
+
+    /* ③ 無理をさせれば入れる */
+    if (o.stretch.length) {
+      b.appendChild(el('h4', { text: '無理をさせれば入れる人（' + o.stretch.length + '名）' }));
+      b.appendChild(el('p', { class: 'vd', text: '法令には触れませんが、店のルールを破ることになります。' }));
+      o.stretch.slice(0, 6).forEach(function (c) {
+        var msgs = c.breaks.map(function (x) { return x.msg; });
+        b.appendChild(el('div', { class: 'violation', style: 'margin-bottom:6px' }, [
+          el('div', { class: 'vt', text: c.name })
+        ].concat(msgs.map(function (m) { return el('div', { class: 'vd', text: '・' + m }); }))
+          .concat([el('div', { style: 'margin-top:6px' }, [
+            pickBtn(c.empId, c.name, 'ghost sm', c.name + 'さんを入れると次のようになります。\n\n'
+              + msgs.map(function (m) { return '・' + m; }).join('\n') + '\n\nそれでも入れますか？')
+          ])])));
+      });
+    }
+
+    /* ④ 入れられない */
+    if (o.blocked.length) {
+      var det = el('details', { class: 'rule', style: 'margin-top:12px' }, [
+        el('summary', { text: '入れられない人（' + o.blocked.length + '名）' })
+      ]);
+      o.blocked.forEach(function (c) {
+        det.appendChild(el('div', { class: 'vd', text: (c.isLaw ? '【法令】' : '') + c.name + '：' + c.reason }));
+      });
+      b.appendChild(det);
+    }
+
+    modal('欠員の代わりを探す', b, [
+      el('button', {
+        class: 'btn ghost danger', text: '代わりを立てず人数不足のままにする', onclick: function () {
+          setCell(emp.id, date, '');
+          closeModal();
+          toast(head + ' は1人不足のままです');
+        }
+      }),
+      el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
+    ]);
   }
 
   function assignmentsWithout(empId, date) {

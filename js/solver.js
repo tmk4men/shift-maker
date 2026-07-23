@@ -321,6 +321,77 @@ var Solver = (function () {
     trace[date][stId][empId] = obj;
   }
 
+  /* =========================================================
+     欠員が出たときの代替要員さがし
+     「入れる／入れない」の二択ではなく、
+     ①すぐ入れる ②本人に確認すれば入れる ③無理をさせれば入れる ④入れられない
+     の4段階に分けて、何を破ることになるかを明示する。
+     ========================================================= */
+
+  // 本人の都合の問題（電話して本人がOKなら入れる）
+  var ASK_PERSON = { 'OPS-033': 1, 'OPS-032': 1, 'LAW-060': 1 };
+  // 運用ルールなので、緊急時は責任者の判断で破れる（法令ではない）
+  var STRETCH = {
+    'OPS-027': '勤務間インターバルが足りなくなります',
+    'OPS-035': '本人の上限（日数・時間）を超えます',
+    'OPS-036': '連勤の上限を超えます',
+    'OPS-042': '年収の上限を超えます（本人の手取りに影響）',
+    'OPS-A07': '週の上限時間を超えます（社会保険の判定に影響）',
+    'OPS-060': '夜勤明けの休みがなくなります',
+    'OPS-064': '月の夜勤上限を超えます',
+    'OPS-006': '新人に教育担当が付きません',
+    'OPS-100': '相性NGの相手と同じ勤務になります'
+  };
+
+  /** date の stId の枠について、excludeEmpId を外した状態で代替候補を探す */
+  function coverageOptions(data, assignments, date, stId, excludeEmpId) {
+    var a = U.clone(assignments || {});
+    if (excludeEmpId && a[date]) {
+      Object.keys(a[date]).forEach(function (k) {
+        a[date][k] = (a[date][k] || []).filter(function (x) { return x !== excludeEmpId; });
+      });
+    }
+    var ctx = Rules.buildContext(data, a);
+    var res = { ready: [], askPerson: [], stretch: [], blocked: [] };
+
+    data.employees.forEach(function (e) {
+      if (e.id === excludeEmpId) return;
+      var ng = Rules.hardCheck(ctx, e.id, date, stId);
+
+      if (!ng.length) {
+        var sc = Rules.score(ctx, e.id, date, stId);
+        res.ready.push({ empId: e.id, name: e.name, score: sc.score, why: sc.why.filter(function (w) { return w.label; }).slice(0, 3) });
+        return;
+      }
+
+      var law = ng.filter(function (v) { return v.ruleId.indexOf('LAW-') === 0 && !ASK_PERSON[v.ruleId]; });
+      var hardOps = ng.filter(function (v) {
+        return !ASK_PERSON[v.ruleId] && !STRETCH[v.ruleId] && v.ruleId.indexOf('LAW-') !== 0;
+      });
+
+      if (law.length || hardOps.length) {
+        res.blocked.push({ empId: e.id, name: e.name, reason: (law[0] || hardOps[0]).msg, isLaw: law.length > 0 });
+        return;
+      }
+
+      var ask = ng.filter(function (v) { return ASK_PERSON[v.ruleId]; });
+      var st = ng.filter(function (v) { return STRETCH[v.ruleId]; });
+
+      if (ask.length && !st.length) {
+        res.askPerson.push({ empId: e.id, name: e.name, reason: ask[0].msg });
+      } else {
+        res.stretch.push({
+          empId: e.id, name: e.name,
+          breaks: ng.map(function (v) { return { ruleId: v.ruleId, msg: STRETCH[v.ruleId] || v.msg }; })
+        });
+      }
+    });
+
+    res.ready.sort(function (x, y) { return x.score - y.score || (x.empId < y.empId ? -1 : 1); });
+    res.stretch.sort(function (x, y) { return x.breaks.length - y.breaks.length; });
+    return res;
+  }
+
   /* 手動編集の可否チェック（UIから使う） */
   function checkManual(data, assignments, empId, date, stId) {
     var ctx = Rules.buildContext(data, U.clone(assignments));
@@ -346,6 +417,9 @@ var Solver = (function () {
     };
   }
 
-  return { generate: generate, checkManual: checkManual, revalidate: revalidate, candidatesFor: candidatesFor };
+  return {
+    generate: generate, checkManual: checkManual, revalidate: revalidate,
+    candidatesFor: candidatesFor, coverageOptions: coverageOptions
+  };
 })();
 if (typeof module !== 'undefined') module.exports = Solver;

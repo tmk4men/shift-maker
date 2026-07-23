@@ -500,6 +500,63 @@ T('シナリオ12：手動でセルを触ったときの再検証');
 }
 
 /* =======================================================================
+   シナリオ12b：当日の欠員対応（代わりを探す）
+   ======================================================================= */
+T('シナリオ12b：急な欠勤の代わりを探す');
+{
+  const { data, res } = run(baseData());
+  const dates = U.monthDates(2026, 8);
+
+  // 早番に人がいる日を探して、1人が欠勤したことにする
+  const dt = dates.find(d => ((res.assignments[d] || {}).A || []).length > 0);
+  const who = res.assignments[dt].A[0];
+  const o = Solver.coverageOptions(data, res.assignments, dt, 'A', who);
+  const total = o.ready.length + o.askPerson.length + o.stretch.length + o.blocked.length;
+  console.log(`  ${dt} 早番 ${Store.empById(who).name}さん欠勤 → 即${o.ready.length} 確認${o.askPerson.length} 無理${o.stretch.length} 不可${o.blocked.length}`);
+
+  ok(total === data.employees.length - 1, '欠勤者を除く全員が4つのどれかに分類される', `${total} / ${data.employees.length - 1}`);
+  ok(!o.ready.concat(o.askPerson).concat(o.stretch).some(c => c.empId === who), '欠勤した本人は候補に出ない');
+
+  // 「すぐ入れる」の人は本当に違反ゼロか（独立検証）
+  let bad = [];
+  o.ready.forEach(c => {
+    const a = JSON.parse(JSON.stringify(res.assignments));
+    Object.keys(a[dt]).forEach(k => { a[dt][k] = a[dt][k].filter(x => x !== who && x !== c.empId); });
+    a[dt].A.push(c.empId);
+    const rv = Solver.revalidate(data, a);
+    const hard = rv.violations.filter(v => v.level === 'hard' && v.empId === c.empId);
+    if (hard.length) bad.push(c.name + ':' + hard[0].ruleId);
+  });
+  ok(bad.length === 0, '「そのまま入れる人」は入れても違反が出ない', bad.join(','));
+
+  // 「無理をさせれば」に法令違反の人が混じっていないこと（これは絶対）
+  const lawIds = ['LAW-001', 'LAW-006', 'LAW-020', 'LAW-024', 'LAW-040', 'LAW-041'];
+  const lawInStretch = o.stretch.filter(c => c.breaks.some(b => lawIds.indexOf(b.ruleId) >= 0));
+  ok(lawInStretch.length === 0, '法令違反になる人は「無理をさせれば入れる」に出さない',
+    lawInStretch.map(c => c.name).join(','));
+
+  // 18歳未満は夜勤の代替候補として絶対に出さない
+  const dtN = dates.find(d => ((res.assignments[d] || {}).N || []).length > 0);
+  if (dtN) {
+    const nWho = res.assignments[dtN].N[0];
+    const on = Solver.coverageOptions(data, res.assignments, dtN, 'N', nWho);
+    const offered = on.ready.concat(on.askPerson).concat(on.stretch).map(c => c.empId);
+    ok(offered.indexOf('e8') < 0, '18歳未満が夜勤の代替候補に出ない');
+    ok(on.blocked.some(c => c.empId === 'e8' && c.isLaw), '18歳未満は「法令で入れられない」と表示される',
+      JSON.stringify(on.blocked.filter(c => c.empId === 'e8')));
+  }
+
+  // 誰も入れない状況でも落ちないこと
+  const d2 = baseData();
+  d2.employees = d2.employees.slice(0, 2);
+  Store.setData(d2);
+  const r2 = Solver.generate(Store.get());
+  const dt2 = U.monthDates(2026, 8)[0];
+  const o2 = Solver.coverageOptions(Store.get(), r2.assignments, dt2, 'A', d2.employees[0].id);
+  ok(typeof o2.ready.length === 'number', '候補が少ない状況でも例外にならない');
+}
+
+/* =======================================================================
    シナリオ13：壊れたデータ・参照切れからの復帰
    ======================================================================= */
 T('シナリオ13：従業員/勤務区分を削除したときに関連データが残らない');

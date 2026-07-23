@@ -133,6 +133,21 @@ tryRun('シフト表のセルをクリック（勤務変更ダイアログ）', 
 });
 ok(byId['modalBody'].children.length > 0, '  → ダイアログの中身が描画される');
 
+tryRun('欠員対応ダイアログが開く', () => {
+  openTab('shift');
+  const cell = byId['panel-shift'].all().find(n =>
+    n.tagName === 'TD' && (n.className || '').indexOf('cell-shift') >= 0 && (n.className || '').indexOf('empty') < 0);
+  if (!cell) throw new Error('勤務の入ったセルが見つからない');
+  cell.click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('代わりを探す') >= 0);
+  if (!b) throw new Error('「代わりを探す」ボタンがない');
+  b.click();
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('そのまま入れる人') < 0) throw new Error('候補一覧が出ない');
+  const foot = byId['modalFoot'].children.map(n => n._text || '').join(' ');
+  if (foot.indexOf('人数不足のまま') < 0) throw new Error('「代わりを立てない」選択肢がない');
+});
+
 tryRun('従業員の編集ダイアログを開く', () => {
   openTab('staff');
   const b = findButton(byId['panel-staff'], '編集');
