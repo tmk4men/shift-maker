@@ -7,24 +7,15 @@
   var staffPage = '';     // スタッフ専用モードの表示（shift = 自分のシフト / submit = 希望提出）
 
   /* スタッフ専用モード：?staff=従業員ID で開くと提出画面だけになる（管理操作は出さない） */
-  var staffOnly = '';
+  var staffOnly = '', inputMode = false;
   try {
     var q = (typeof location !== 'undefined' && location.search) ? location.search : '';
     var m = q.match(/[?&]staff=([^&]+)/);
     if (m) staffOnly = decodeURIComponent(m[1]);
-  } catch (err) { staffOnly = ''; }
+    inputMode = /[?&]input=1/.test(q);
+  } catch (err) { staffOnly = ''; inputMode = false; }
 
-  /* 受付が締め切られていないか（締切日を過ぎていないか） */
-  function collectClosed() {
-    if (!D.settings.collectOpen) return '責任者が受付を締め切りました';
-    var dl = D.settings.deadline;
-    if (dl) {
-      var t = new Date();
-      var today = t.getFullYear() + '-' + U.pad(t.getMonth() + 1) + '-' + U.pad(t.getDate());
-      if (today > dl) return '提出期限（' + dl + '）を過ぎています';
-    }
-    return '';
-  }
+
 
   /* ================= 共通 ================= */
   function toast(msg) {
@@ -77,7 +68,9 @@
     return [
       { n: 1, tab: 'setup', label: '店の設定', done: needSet, todo: '勤務区分と必要人数を決める' },
       { n: 2, tab: 'staff', label: 'スタッフ登録', done: D.employees.length > 0, todo: 'スタッフを登録する' },
-      { n: 3, tab: 'request', label: '希望を集める', done: Store.submittedCount() > 0, todo: '希望休・出勤できる日を入れる' },
+      { n: 3, tab: 'request', label: '希望を入れる', done: D.employees.some(function (e) {
+        return dates.some(function (d) { return D.avail[e.id] && D.avail[e.id][d]; });
+      }), todo: 'スタッフの行ける日・時間を入れる' },
       { n: 4, tab: 'shift', label: 'シフト作成', done: hasShift, todo: 'シフトを自動作成する' }
     ];
   }
@@ -147,20 +140,11 @@
         field('年', input('number', s.year, function (e) { s.year = U.num(e.target.value, 2000, 2100, s.year); saveAndRender(); }, { min: 2000, max: 2100 })),
         field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return { v: m, t: m + '月' }; }), s.month,
           function (e) { s.month = +e.target.value; saveAndRender(); })),
-        field('人件費予算（0=無制限）', input('number', s.budget, function (e) { s.budget = U.num(e.target.value, 0, 1e12, 0); Store.save(); }, { step: 10000, min: 0 })),
-        field('週の起算日', select([{ v: 0, t: '日曜' }, { v: 1, t: '月曜' }], s.weekStartsOn, function (e) { s.weekStartsOn = +e.target.value; Store.save(); })),
-        field('36協定', select([{ v: 'y', t: 'あり（残業可）' }, { v: 'n', t: 'なし（残業不可）' }], s.has36 ? 'y' : 'n',
-          function (e) { s.has36 = e.target.value === 'y'; Store.save(); })),
-        field('未提出日の扱い', select([{ v: 'available', t: '出勤できる扱い' }, { v: 'unavailable', t: '出勤不可の扱い' }], s.unsubmittedPolicy,
-          function (e) { s.unsubmittedPolicy = e.target.value; Store.save(); }))
+        field('週の始まり', select([{ v: 0, t: '日曜' }, { v: 1, t: '月曜' }], s.weekStartsOn, function (e) { s.weekStartsOn = +e.target.value; saveAndRender(); })),
+        field('人件費予算（0=なし）', input('number', s.budget, function (e) { s.budget = U.num(e.target.value, 0, 1e12, 0); Store.save(); }, { step: 10000, min: 0 }))
       ]),
-      el('div', { class: 'row', style: 'margin-top:10px' }, [
-        field('祝日（カンマ区切り 例 2026-08-11）', input('text', (s.holidays || []).join(','), function (e) {
-          s.holidays = e.target.value.split(',').map(function (x) { return x.trim(); }).filter(Boolean); Store.save();
-        }, { style: 'width:320px' })),
-        el('div', { class: 'field' }, [el('label', { text: '人数の上振れ' }),
-        checkbox('最低出勤日数を満たすため必要人数＋1まで許容', s.allowOverstaff, function (e) { s.allowOverstaff = e.target.checked; Store.save(); })])
-      ])
+      el('p', { class: 'hint', style: 'margin-top:10px', text:
+        '祝日は自動判定します。希望が入力されていない日は出勤させません。必要人数を超える配置もしません。' })
     ]));
 
     /* 勤務区分 */
@@ -395,49 +379,52 @@
     var dates = Store.monthDates();
     var total = D.employees.length, done = Store.submittedCount();
 
-    /* 提出状況 */
+    /* 入力状況 */
     var statusRows = D.employees.map(function (e) {
-      var sub = Store.submissionOf(e.id);
       var filled = dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length;
+      var cls = filled === 0 ? 'ng' : filled < dates.length ? 'warn' : 'ok';
+      var label = filled === 0 ? '未入力（シフトに入りません）' : filled + ' / ' + dates.length + ' 日';
       return el('tr', {}, [
         el('td', { text: e.name }),
-        el('td', {}, [el('span', { class: 'badge ' + (sub.status === 'submitted' ? 'ok' : 'warn'), text: sub.status === 'submitted' ? '提出済み' : '未提出' })]),
-        el('td', { class: 'muted', text: filled + ' / ' + dates.length + ' 日' }),
-        el('td', { class: 'muted', text: sub.at || '' }),
+        el('td', {}, [el('span', { class: 'badge ' + cls, text: label })]),
         el('td', {}, [
-          el('button', { class: 'btn ghost sm', text: '提出画面を開く', onclick: function () { staffView = e.id; render(); } }),
+          el('button', { class: 'btn ghost sm', text: '入力する', onclick: function () { staffView = e.id; render(); } }),
           el('button', {
-            class: 'btn ghost sm', text: 'スタッフ用リンク', title: 'この人だけの提出画面のURL',
-            onclick: function () { showStaffLink(e); }
+            class: 'btn ghost sm', text: '全日OKにする', onclick: function () {
+              if (!D.avail[e.id]) D.avail[e.id] = {};
+              dates.forEach(function (d) {
+                if ((e.ngWeekdays || []).indexOf(U.weekdayOf(d)) >= 0) D.avail[e.id][d] = { off: true };
+                else D.avail[e.id][d] = { allday: true };
+              });
+              saveAndRender(); toast(e.name + 'さんを全日OKにしました');
+            }
           })
         ])
       ]);
     });
 
-    p.appendChild(card('提出状況　' + done + ' / ' + total + ' 人',
-      '全員の提出がそろうか、締切を押すと自動作成できます。', [
-      el('div', { class: 'row', style: 'margin-bottom:10px' }, [
-        field('提出締切日', input('date', D.settings.deadline, function (e) { D.settings.deadline = e.target.value; Store.save(); })),
-        el('div', { class: 'field' }, [el('label', { text: '受付' }),
-        el('span', { class: 'badge ' + (D.settings.collectOpen ? 'ok' : 'ng'), text: D.settings.collectOpen ? '受付中' : '締切済み' })]),
-        el('div', { class: 'field' }, [el('label', { text: ' ' }), el('button', {
-          class: 'btn', text: D.settings.collectOpen ? '締め切ってシフトを作成' : '受付を再開する',
-          onclick: function () {
-            if (D.settings.collectOpen) {
-              if (done < total && !confirm('未提出が ' + (total - done) + ' 人います。締め切って作成しますか？\n（未提出の日は「' + (D.settings.unsubmittedPolicy === 'available' ? '出勤できる' : '出勤不可') + '」扱いになります）')) return;
-              D.settings.collectOpen = false; Store.save();
-              switchTab('shift'); doGenerate();
-            } else { D.settings.collectOpen = true; saveAndRender(); }
+    var noInput = D.employees.filter(function (e) {
+      return !dates.some(function (d) { return D.avail[e.id] && D.avail[e.id][d]; });
+    });
+
+    p.appendChild(card('希望の入力状況　' + (D.employees.length - noInput.length) + ' / ' + D.employees.length + ' 人',
+      '入力がない日は出勤させません。全く入力のない人はシフトに入りません。', [
+      el('div', { class: 'row', style: 'margin-bottom:12px' }, [
+        el('button', {
+          class: 'btn', text: 'シフトを作成する', onclick: function () {
+            if (noInput.length && !confirm(noInput.map(function (e) { return e.name; }).join('、')
+              + ' さんの希望が未入力です。\nこのままだとシフトに入りません。作成しますか？')) return;
+            switchTab('shift'); doGenerate();
           }
-        })])
+        }),
+        el('button', { class: 'btn ghost', text: '希望ファイルを読み込む', onclick: function () { document.getElementById('fileRequests').click(); } }),
+        el('button', { class: 'btn ghost', text: 'コードを貼り付けて取り込む', onclick: importCodeDialog }),
+        el('button', { class: 'btn ghost', text: 'スタッフ用の入力ページ', onclick: showInputPageLink })
       ]),
       el('div', { class: 'scroll' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['氏名', '状態', '入力済み', '提出日時', ''].map(function (h) { return el('th', { text: h }); }))]),
+        el('thead', {}, [el('tr', {}, ['氏名', '入力状況', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, statusRows)
-      ])]),
-      el('div', { class: 'row', style: 'margin-top:10px' }, [
-        el('button', { class: 'btn ghost sm', text: '提出コードを取り込む', onclick: importCodeDialog })
-      ])
+      ])])
     ]));
 
     /* スタッフ提出画面 */
@@ -490,6 +477,65 @@
     ]);
   }
 
+  /** スタッフに配る入力ページのURL */
+  function showInputPageLink() {
+    var base = '';
+    try { base = (typeof location !== 'undefined') ? (location.origin + location.pathname) : 'index.html'; }
+    catch (err) { base = 'index.html'; }
+    var url = base + '?input=1';
+    var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:60px;font-family:monospace;font-size:12px' });
+    ta.value = url;
+    modal('スタッフ用の入力ページ', el('div', {}, [
+      el('p', {}, [el('strong', { text: '使い方' })]),
+      el('p', { class: 'hint', text: '1. このURLをスタッフに送る（LINEなど）' }),
+      el('p', { class: 'hint', text: '2. スタッフは名前と、行ける日・時間を入力して［ファイルに保存］' }),
+      el('p', { class: 'hint', text: '3. できたファイルを店長に送り返してもらう' }),
+      el('p', { class: 'hint', text: '4. この画面の［希望ファイルを読み込む］でまとめて取り込む（何人分でも一度に選べます）' }),
+      ta
+    ]), [
+      el('button', {
+        class: 'btn', text: 'コピー', onclick: function () {
+          try { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(url); toast('コピーしました'); }
+          catch (e) { toast('コピーできませんでした'); }
+        }
+      }),
+      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
+    ]);
+  }
+
+  /** 希望ファイルをまとめて取り込む */
+  function importRequestFiles(files) {
+    var okList = [], ngList = [], pending = files.length;
+    if (!pending) return;
+    Array.prototype.forEach.call(files, function (f) {
+      var r = new FileReader();
+      r.onload = function () {
+        try {
+          var emp = Store.importSubmission(decodeCode(r.result));
+          okList.push(emp.name);
+        } catch (err) {
+          ngList.push(f.name + '：' + err.message);
+        }
+        if (--pending === 0) finish();
+      };
+      r.onerror = function () { ngList.push(f.name + '：読めませんでした'); if (--pending === 0) finish(); };
+      r.readAsText(f);
+    });
+
+    function finish() {
+      D = Store.get(); render();
+      if (ngList.length) {
+        modal('読み込み結果', el('div', {}, [
+          okList.length ? el('p', { text: '取り込めた人：' + okList.join('、') }) : null,
+          el('h4', { text: '取り込めなかったファイル', style: 'margin-top:10px' })
+        ].concat(ngList.map(function (m) { return el('div', { class: 'vd', text: '・' + m }); }))),
+          [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
+      } else {
+        toast(okList.length + '人分の希望を取り込みました（' + okList.join('、') + '）');
+      }
+    }
+  }
+
   function importCodeDialog() {
     var ta = el('textarea', { placeholder: 'ここに提出コードを貼り付け', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
     var msg = el('p', { class: 'hint', text: 'スタッフから受け取ったコードを貼り付けて［取り込む］を押してください。' });
@@ -527,8 +573,7 @@
   }
 
   function staffSubmitCard(e, dates) {
-    var closed = collectClosed();
-    var locked = !!closed;
+    var locked = false;
 
     var rows = dates.map(function (d) {
       var w = U.weekdayOf(d);
@@ -619,9 +664,7 @@
 
     var doneCount = dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length;
 
-    var foot = locked ? [
-      el('div', { class: 'badge ng', text: closed + '（確認のみ）' })
-    ] : [
+    var foot = [
       el('button', {
         class: 'btn big', text: 'この内容で提出する', onclick: function () {
           if (doneCount === 0 && !confirm('まだ1日も入力されていません。このまま提出しますか？')) return;
@@ -631,16 +674,9 @@
             at: now.getFullYear() + '/' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + U.pad(now.getHours()) + ':' + U.pad(now.getMinutes())
           };
           Store.save();
-          toast(e.name + 'さんの希望を受け付けました');
+          toast(e.name + 'さんの希望を保存しました');
           if (staffOnly) { render(); return; }
           staffView = ''; render();
-          if (Store.submittedCount() === D.employees.length) {
-            setTimeout(function () {
-              if (confirm('全員の提出がそろいました。今すぐシフトを自動作成しますか？')) {
-                D.settings.collectOpen = false; Store.save(); switchTab('shift'); doGenerate();
-              }
-            }, 300);
-          }
         }
       }),
       el('button', {
@@ -652,8 +688,7 @@
 
     var sub = Store.submissionOf(e.id);
     return card(e.name + ' さんの希望提出（' + D.settings.year + '年' + D.settings.month + '月）',
-      '行ける日と時間を選んで、下のボタンで提出してください。' +
-      (D.settings.deadline ? '　提出期限：' + D.settings.deadline : ''), [
+      '行ける日と時間を選んでください。', [
       el('div', { class: 'row', style: 'margin-bottom:8px' }, [
         el('span', { class: 'badge ' + (sub.status === 'submitted' ? 'ok' : 'warn'), text: sub.status === 'submitted' ? '提出済み（' + sub.at + '）' : '未提出' }),
         el('span', { class: 'badge ' + (doneCount === dates.length ? 'ok' : 'warn'), text: '入力 ' + doneCount + ' / ' + dates.length + ' 日' })
@@ -857,12 +892,23 @@
         out.push({ level: 'ng', msg: st.name + 'の休憩時間が法定を下回っています（実働' + U.min2h(c.work) + 'h / 休憩' + st.breakMin + '分）' });
     });
 
-    // 提出状況
-    var un = D.employees.length - Store.submittedCount();
-    if (un > 0)
+    // 希望の入力状況（入力がない日は出勤させない仕様なので、ここが一番効く）
+    var noInput = D.employees.filter(function (e) {
+      return !dates.some(function (d) { return D.avail[e.id] && D.avail[e.id][d]; });
+    });
+    if (noInput.length)
       out.push({
-        level: 'warn', msg: '未提出が ' + un + ' 人います',
-        hint: '未提出の日は「' + (D.settings.unsubmittedPolicy === 'available' ? '出勤できる' : '出勤不可') + '」扱いで作成されます（「① 基本設定」で変更可）'
+        level: 'ng', msg: noInput.map(function (e) { return e.name; }).join('、') + ' さんの希望が未入力です',
+        hint: '入力がない日は出勤させないため、この人たちはシフトに入りません。「③ 希望を入れる」で入力してください'
+      });
+    var partial = D.employees.filter(function (e) {
+      if (noInput.indexOf(e) >= 0) return false;
+      return dates.filter(function (d) { return D.avail[e.id] && D.avail[e.id][d]; }).length < dates.length;
+    });
+    if (partial.length)
+      out.push({
+        level: 'warn', msg: partial.map(function (e) { return e.name; }).join('、') + ' さんは一部の日が未入力です',
+        hint: '未入力の日は出勤しない扱いになります'
       });
 
     return out;
@@ -1142,6 +1188,182 @@
     saveAndRender();
   }
 
+  /* ================= スタッフ入力ページ（?input=1） =================
+     店の設定が何もなくても単体で動く。名前と行ける日時を入れてファイルに保存し、
+     それを責任者が読み込む。手入力の手間をなくすための画面。 */
+  var inputDraft = null;
+
+  function loadDraft() {
+    if (inputDraft) return inputDraft;
+    var saved = null;
+    try {
+      if (typeof localStorage !== 'undefined') saved = JSON.parse(localStorage.getItem('shift-input-draft') || 'null');
+    } catch (e) { saved = null; }
+    var now = new Date();
+    var y = now.getFullYear(), m = now.getMonth() + 2;      // 既定は翌月
+    if (m > 12) { m = 1; y++; }
+    inputDraft = saved && saved.avail ? saved : { name: '', year: y, month: m, avail: {}, requests: {} };
+    return inputDraft;
+  }
+  function saveDraft() {
+    try {
+      if (typeof localStorage !== 'undefined')
+        localStorage.setItem('shift-input-draft', JSON.stringify(inputDraft));
+    } catch (e) { /* 保存できなくても入力は続けられる */ }
+  }
+
+  function renderInputPage() {
+    var tabsEl = document.getElementById('tabs');
+    if (tabsEl && tabsEl.style) tabsEl.style.display = 'none';
+    var ha = document.querySelector ? document.querySelector('.header-actions') : null;
+    if (ha && ha.style) ha.style.display = 'none';
+    ['setup', 'staff', 'shift', 'summary', 'rules'].forEach(function (n) {
+      var pn = document.getElementById('panel-' + n);
+      if (pn) { pn.innerHTML = ''; pn.classList.add('hidden'); }
+    });
+
+    var dr = loadDraft();
+    var p = document.getElementById('panel-request');
+    p.classList.remove('hidden');
+    p.innerHTML = '';
+
+    var dates = U.monthDates(dr.year, dr.month);
+    var filled = dates.filter(function (d) { return dr.avail[d]; }).length;
+
+    /* 名前と対象月 */
+    p.appendChild(card('シフト希望の入力', '名前と、行ける日・時間を入れて、いちばん下の［ファイルに保存］を押してください。', [
+      el('div', { class: 'row' }, [
+        el('div', { class: 'field grow' }, [el('label', { text: 'あなたの名前' }),
+        input('text', dr.name, function (e) { dr.name = e.target.value; saveDraft(); }, { placeholder: '例）山田 太郎' })]),
+        field('年', input('number', dr.year, function (e) { dr.year = U.num(e.target.value, 2000, 2100, dr.year); saveDraft(); render(); }, { min: 2000, max: 2100 })),
+        field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (mm) { return { v: mm, t: mm + '月' }; }), dr.month,
+          function (e) { dr.month = +e.target.value; saveDraft(); render(); }))
+      ]),
+      el('div', { class: 'row', style: 'margin-top:12px' }, [
+        el('button', {
+          class: 'btn ghost sm', text: '全部「終日OK」', onclick: function () {
+            dates.forEach(function (d) { dr.avail[d] = { allday: true }; }); saveDraft(); render();
+          }
+        }),
+        el('button', {
+          class: 'btn ghost sm', text: '平日だけ終日OK', onclick: function () {
+            dates.forEach(function (d) {
+              var w = U.weekdayOf(d);
+              dr.avail[d] = (w === 0 || w === 6) ? { off: true } : { allday: true };
+            });
+            saveDraft(); render();
+          }
+        }),
+        el('button', {
+          class: 'btn ghost sm danger', text: '入力を消す', onclick: function () {
+            if (!confirm('入力した内容をすべて消します。よろしいですか？')) return;
+            dr.avail = {}; dr.requests = {}; saveDraft(); render();
+          }
+        }),
+        el('span', { class: 'badge ' + (filled === dates.length ? 'ok' : 'warn'), text: '入力 ' + filled + ' / ' + dates.length + ' 日' })
+      ])
+    ]));
+
+    /* 日ごとの入力 */
+    var rows = dates.map(function (d) {
+      var w = U.weekdayOf(d);
+      var av = dr.avail[d] || null;
+      var mode = !av ? '' : av.off ? 'off' : av.allday ? 'allday' : 'time';
+
+      var fromI = input('time', av && av.from ? av.from : '09:00', function (ev) {
+        if (!U.isTime(ev.target.value)) return;
+        dr.avail[d].from = ev.target.value; saveDraft();
+      });
+      var toI = input('time', av && av.to ? av.to : '18:00', function (ev) {
+        if (!U.isTime(ev.target.value)) return;
+        dr.avail[d].to = ev.target.value; saveDraft();
+      });
+      if (mode !== 'time') { fromI.disabled = true; toI.disabled = true; }
+
+      var sel = select([
+        { v: '', t: '未入力' }, { v: 'allday', t: '終日OK' }, { v: 'time', t: '時間を指定' }, { v: 'off', t: '行けない' }
+      ], mode, function (ev) {
+        var v = ev.target.value;
+        if (v === '') delete dr.avail[d];
+        else if (v === 'allday') dr.avail[d] = { allday: true };
+        else if (v === 'off') dr.avail[d] = { off: true };
+        else dr.avail[d] = { from: fromI.value, to: toI.value };
+        saveDraft(); render();
+      });
+
+      var reqSel = select([
+        { v: '', t: '希望なし' }, { v: 'off', t: 'できれば休みたい' }, { v: 'must', t: '絶対に休みたい' },
+        { v: 'paid', t: '有給を使いたい' }, { v: 'want', t: 'ぜひ入りたい' }
+      ], dr.requests[d] || '', function (ev) {
+        if (ev.target.value === '') delete dr.requests[d]; else dr.requests[d] = ev.target.value;
+        saveDraft();
+      });
+
+      var hol = Store.holidayName(d);
+      return el('tr', { class: 'day-row' }, [
+        el('td', {
+          class: 'daycell ' + (w === 0 || hol ? 'sun' : w === 6 ? 'sat' : ''),
+          'data-label': '日付', text: (+d.slice(8)) + '日（' + U.WD[w] + '）' + (hol ? ' ' + hol : '')
+        }),
+        el('td', { 'data-label': '出勤できる？' }, [sel]),
+        el('td', { 'data-label': '何時から' }, [fromI]),
+        el('td', { 'data-label': '何時まで' }, [toI]),
+        el('td', { 'data-label': '希望' }, [reqSel])
+      ]);
+    });
+
+    p.appendChild(card('', '', [
+      el('div', { class: 'scroll staff-table', style: 'max-height:60vh' }, [el('table', {}, [
+        el('thead', {}, [el('tr', {}, ['日付', '出勤できる？', '何時から', '何時まで', '希望'].map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, rows)
+      ])]),
+      el('div', { class: 'row', style: 'margin-top:14px' }, [
+        el('button', { class: 'btn big', text: 'ファイルに保存する', onclick: saveInputFile }),
+        el('button', { class: 'btn ghost', text: 'コードでコピーする', onclick: copyInputCode })
+      ]),
+      el('p', { class: 'hint', style: 'margin-top:8px', text: '保存したファイル（またはコピーしたコード）を責任者に送ってください。入力内容はこの端末に残るので、閉じても続きから入力できます。' })
+    ]));
+  }
+
+  function inputPayload() {
+    var dr = loadDraft();
+    if (!dr.name.trim()) { alert('名前を入れてください'); return null; }
+    return {
+      t: 'shift-submission', v: 1, name: dr.name.trim(), id: '',
+      ym: dr.year + '-' + U.pad(dr.month),
+      avail: dr.avail, requests: dr.requests
+    };
+  }
+
+  function saveInputFile() {
+    var obj = inputPayload(); if (!obj) return;
+    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'シフト希望_' + obj.name + '_' + obj.ym + '.json';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    toast('保存しました。責任者に送ってください');
+  }
+
+  function copyInputCode() {
+    var obj = inputPayload(); if (!obj) return;
+    var code = encodeCode(obj);
+    var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
+    ta.value = code;
+    modal('提出コード', el('div', {}, [
+      el('p', { class: 'hint', text: 'このコードをコピーして、LINEなどで責任者に送ってください。' }), ta
+    ]), [
+      el('button', {
+        class: 'btn', text: 'コピー', onclick: function () {
+          try { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(code); toast('コピーしました'); }
+          catch (e) { toast('手動で選択してコピーしてください'); }
+        }
+      }),
+      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
+    ]);
+  }
+
   /* ================= スタッフ専用モード（?staff=従業員ID） ================= */
   function renderStaffOnly() {
     // 管理用のタブ・操作を隠す
@@ -1262,6 +1484,7 @@
 
   function render() {
     D = Store.get();
+    if (inputMode) return renderInputPage();
     if (staffOnly) return renderStaffOnly();
     if (currentTab === 'setup') renderSetup();
     if (currentTab === 'staff') renderStaff();
@@ -1291,6 +1514,10 @@
       catch (err) { alert('読み込めませんでした：' + err.message); }
     };
     r.readAsText(f);
+    e.target.value = '';
+  });
+  document.getElementById('fileRequests').addEventListener('change', function (e) {
+    importRequestFiles(e.target.files);
     e.target.value = '';
   });
   document.getElementById('btnReset').addEventListener('click', function () {

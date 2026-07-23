@@ -237,12 +237,12 @@ var Rules = (function () {
     if (on(data, 'OPS-032') && (e.ngWeekdays || []).indexOf(U.weekdayOf(date)) >= 0)
       ng('OPS-032', U.WD[U.weekdayOf(date)] + '曜は勤務不可の設定です');
 
-    // 本人が提出した勤務可能時間（スタッフ提出）
+    // 本人が提出した勤務可能時間
+    // 未入力の日は「出勤できない」として扱う（設定ではなく固定の仕様）
     if (on(data, 'OPS-033')) {
       var av = Store.availOf(empId, date);
       if (av === null) {
-        if (data.settings.unsubmittedPolicy === 'unavailable')
-          ng('OPS-033', 'この日の勤務可能時間が未提出です');
+        ng('OPS-033', 'この日の希望が未入力です（入力がない日は出勤させません）');
       } else if (av === false) {
         ng('OPS-033', '本人が「この日は不可」と提出しています');
       } else if (av !== 'any') {
@@ -258,26 +258,22 @@ var Rules = (function () {
     if (req === 'must') ng('LAW-060', '絶対休（確定休）です');
     if (req === 'paid') ng('LAW-060', '有給休暇の申請日です');
 
-    // 18歳未満
+    // 18歳未満（時間外は一切不可）
     if (e.minor) {
       if (c.night > 0) ng('LAW-040', '18歳未満は深夜(22:00-5:00)の勤務不可');
       if (c.work > 480) ng('LAW-041', '18歳未満は1日8時間を超えられません');
     }
-
-    // 1日8時間
-    if (c.work > 480 && (!data.settings.has36 || e.minor))
-      ng('LAW-005', '36協定がないため8時間超の勤務は割り当てられません');
 
     // 週40時間 / 時間外の上限
     var wk = weekKey(data, date);
     var wmin = (ctx.stats[empId].week[wk] || 0) + c.work;
     var wot = (ctx.stats[empId].weekOt[wk] || 0) + Math.max(0, c.work - 480);
     var weeklyCap = cfg(data, 'LAW-001').params.weekly;
-    if (!data.settings.has36 || e.minor) {
+    if (e.minor) {
       if (wmin > weeklyCap)
-        ng('LAW-001', '週の法定労働時間(' + (weeklyCap / 60) + 'h)を超えます（この週 ' + U.min2h(wmin) + 'h）'
-          + (e.minor ? '。18歳未満は36協定があっても超えられません' : ''));
+        ng('LAW-041', '18歳未満は週' + (weeklyCap / 60) + '時間を超えられません（この週 ' + U.min2h(wmin) + 'h）');
     } else {
+      // 法定時間を超える分は時間外。月45時間を上限として扱う（36協定の原則）
       var otCap = cfg(data, 'LAW-006').params.monthlyOt || 2700;
       var otAfter = monthlyOt(ctx, empId, wk, wmin, wot);
       if (otAfter > otCap)
@@ -485,6 +481,22 @@ var Rules = (function () {
     });
 
     var dates = Store.monthDates();
+
+    // 同じ日に2つ以上の勤務が入っていないか
+    // （recheck では片方を外してから判定するため、ここで別に見る必要がある）
+    dates.forEach(function (date) {
+      var seen = {};
+      data.shiftTypes.forEach(function (st) {
+        assignedAt(ctx, date, st.id).forEach(function (id) {
+          if (seen[id]) {
+            var e = ctx.emp[id];
+            push('hard', 'OPS-A06', date + '：' + (e ? e.name : id) + 'さんが同じ日に2つの勤務（'
+              + seen[id] + '・' + st.name + '）に入っています', date, st.id, id);
+          } else seen[id] = st.name;
+        });
+      });
+    });
+
     dates.forEach(function (date) {
       data.shiftTypes.forEach(function (st) {
         var need = Store.needOf(date, st.id);
@@ -539,10 +551,10 @@ var Rules = (function () {
         else if (tot > e.incomeCap * 0.9) push('soft', 'OPS-042', e.name + 'さん：年収上限の90%到達（' + U.yen(tot) + ' / ' + U.yen(e.incomeCap) + '）', '', '', e.id);
       }
       // 週40時間 / 時間外の上限
-      if (!data.settings.has36 || e.minor) {
+      if (e.minor) {
         Object.keys(s.week).forEach(function (wk) {
           if (s.week[wk] > 2400)
-            push('hard', e.minor ? 'LAW-041' : 'LAW-001', e.name + 'さん：' + wk + 'の週が' + U.min2h(s.week[wk]) + '時間（36協定なしで40時間超）', '', '', e.id);
+            push('hard', 'LAW-041', e.name + 'さん：' + wk + 'の週が' + U.min2h(s.week[wk]) + '時間（18歳未満は40時間まで）', '', '', e.id);
         });
       } else {
         var ot = monthlyOt(ctx, e.id);

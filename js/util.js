@@ -108,11 +108,63 @@ var U = (function () {
     return '"' + String(v === undefined || v === null ? '' : v).replace(/"/g, '""') + '"';
   }
 
+  /* ---------- 日本の祝日（自動計算・設定不要） ---------- */
+  var holidayCache = {};
+
+  /** その年の n 番目の月曜日 */
+  function nthMonday(y, m, n) {
+    var first = new Date(y, m - 1, 1).getDay();     // 0=日
+    var day = 1 + ((8 - first) % 7) + (n - 1) * 7;  // 最初の月曜 + 7×(n-1)
+    return ymd(y, m, day);
+  }
+
+  /** 日本の祝日一覧（1980〜2099年で有効）。{ 'YYYY-MM-DD': '名称' } */
+  function jpHolidays(y) {
+    if (holidayCache[y]) return holidayCache[y];
+    var h = {};
+    function set(date, name) { if (date) h[date] = name; }
+
+    set(ymd(y, 1, 1), '元日');
+    set(nthMonday(y, 1, 2), '成人の日');
+    set(ymd(y, 2, 11), '建国記念の日');
+    if (y >= 2020) set(ymd(y, 2, 23), '天皇誕生日');
+    // 春分の日・秋分の日は天文計算の近似式
+    set(ymd(y, 3, Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4))), '春分の日');
+    set(ymd(y, 4, 29), '昭和の日');
+    set(ymd(y, 5, 3), '憲法記念日');
+    set(ymd(y, 5, 4), 'みどりの日');
+    set(ymd(y, 5, 5), 'こどもの日');
+    set(nthMonday(y, 7, 3), '海の日');
+    if (y >= 2016) set(ymd(y, 8, 11), '山の日');
+    set(nthMonday(y, 9, 3), '敬老の日');
+    set(ymd(y, 9, Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4))), '秋分の日');
+    set(nthMonday(y, 10, 2), y >= 2020 ? 'スポーツの日' : '体育の日');
+    set(ymd(y, 11, 3), '文化の日');
+    set(ymd(y, 11, 23), '勤労感謝の日');
+
+    // 振替休日：日曜と重なったら、次の祝日でない日を休みにする
+    Object.keys(h).slice().forEach(function (d) {
+      if (weekdayOf(d) !== 0) return;
+      var next = addDays(d, 1);
+      while (h[next]) next = addDays(next, 1);
+      h[next] = '振替休日';
+    });
+
+    // 国民の休日：祝日に挟まれた平日（敬老の日と秋分の日の間などに発生）
+    Object.keys(h).slice().sort().forEach(function (d) {
+      var mid = addDays(d, 1), after = addDays(d, 2);
+      if (!h[mid] && h[after] && weekdayOf(mid) !== 0) h[mid] = '国民の休日';
+    });
+
+    holidayCache[y] = h;
+    return h;
+  }
+
   return {
     pad: pad, ymd: ymd, parseYmd: parseYmd, daysInMonth: daysInMonth, weekdayOf: weekdayOf,
     WD: WD, monthDates: monthDates, addDays: addDays, hm2min: hm2min, min2hm: min2hm,
     min2h: min2h, overlap: overlap, yen: yen, el: el, esc: esc, uid: uid, clone: clone,
-    num: num, isTime: isTime, csv: csv
+    num: num, isTime: isTime, csv: csv, jpHolidays: jpHolidays, nthMonday: nthMonday
   };
 })();
 

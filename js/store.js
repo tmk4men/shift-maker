@@ -71,27 +71,56 @@ var Store = (function () {
       settings: {
         storeName: 'サンプル店',
         year: y, month: m,
-        holidays: [],           // 祝日 'YYYY-MM-DD'
-        budget: 0,              // 月間人件費予算（0=無制限）
-        has36: true,            // 36協定あり
-        weekStartsOn: 0,        // 週の起算日 0=日曜
-        collectOpen: true,      // 希望提出の受付中か
-        deadline: '',           // 提出締切日
-        unsubmittedPolicy: 'available', // 未提出日の扱い available=出勤可 / unavailable=不可
-        allowOverstaff: false   // 最低出勤日数を満たすために必要人数＋1まで許容するか
+        weekStartsOn: 0,        // 週の始まり 0=日曜 1=月曜（ここだけは設定できる）
+        budget: 0               // 月間人件費予算（0=無制限）
       },
+      // 祝日は自動計算（util.jpHolidays）。未提出日は出勤させない。
+      // 必要人数を超える配置はしない。この3つは設定にせず固定。
       shiftTypes: shiftTypes,
       demand: { byWeekday: byWeekday, roleReq: roleReq, overrides: {} },
       employees: employees,
-      requests: {},             // requests[empId][date] = 'off'|'must'|'want'|'paid'
-      avail: {},                // avail[empId][date] = {allday:true} | {off:true} | {from:'09:00',to:'18:00'}
-      submissions: {},          // submissions[empId] = {status:'submitted', at:'...'}
+      requests: sampleRequests(y, m, employees),
+      avail: sampleAvail(y, m, employees),   // avail[empId][date] = {allday:true}|{off:true}|{from,to}
+      submissions: sampleSubmissions(employees),
       assignments: {},          // assignments[date][shiftTypeId] = [empId,...]
       prevMonth: {},            // prevMonth[date][shiftTypeId] = [empId,...]（月跨ぎ判定用）
       carryover: {},            // carryover[empId] = {nights, weekends, rejects}
       ruleConfig: {},           // rules.js の既定からの差分
       lastResult: null
     };
+  }
+
+  /* ---------- サンプル用の希望データ（初回から動くように） ---------- */
+  function sampleAvail(y, m, employees) {
+    var out = {};
+    var dates = U.monthDates(y, m);
+    employees.forEach(function (e, i) {
+      out[e.id] = {};
+      dates.forEach(function (d, j) {
+        var w = U.weekdayOf(d);
+        if ((e.ngWeekdays || []).indexOf(w) >= 0) { out[e.id][d] = { off: true }; return; }
+        // 「この日は行けない」を人ごとにずらして入れる（周期11なので10人まで重ならない）
+        if ((j + i) % 11 === 0) { out[e.id][d] = { off: true }; return; }
+        if (e.id === 'e5' || e.id === 'e8') out[e.id][d] = { from: '08:00', to: '17:00' };
+        else out[e.id][d] = { allday: true };
+      });
+    });
+    return out;
+  }
+  function sampleRequests(y, m, employees) {
+    var out = {};
+    var dates = U.monthDates(y, m);
+    employees.forEach(function (e, i) {
+      out[e.id] = {};
+      if (dates[4 + i]) out[e.id][dates[4 + i]] = 'off';
+      if (dates[15 + (i % 5)]) out[e.id][dates[15 + (i % 5)]] = 'want';
+    });
+    return out;
+  }
+  function sampleSubmissions(employees) {
+    var out = {};
+    employees.forEach(function (e) { out[e.id] = { status: 'submitted', at: 'サンプル' }; });
+    return out;
   }
 
   /* ---------- 保存・読み込み ---------- */
@@ -130,7 +159,6 @@ var Store = (function () {
     var s = d.settings;
     if (!(s.year >= 1970 && s.year <= 3000)) s.year = base.settings.year;
     if (!(s.month >= 1 && s.month <= 12)) s.month = base.settings.month;
-    if (!Array.isArray(s.holidays)) s.holidays = [];
 
     if (!d.shiftTypes.length) d.shiftTypes = U.clone(base.shiftTypes);
     d.shiftTypes.forEach(function (st, i) {
@@ -314,9 +342,12 @@ var Store = (function () {
   }
   function importSubmission(obj) {
     var d = get();
-    if (!obj || obj.t !== 'shift-submission') throw new Error('提出コードではありません');
-    var e = empById(obj.id) || d.employees.filter(function (x) { return x.name === obj.name; })[0];
-    if (!e) throw new Error('「' + (obj.name || '?') + '」という従業員が登録されていません');
+    if (!obj || obj.t !== 'shift-submission') throw new Error('シフト希望のデータではありません');
+    // ID優先、なければ氏名で照合（空白の違いは無視する）
+    function norm(x) { return String(x || '').replace(/[\s　]/g, ''); }
+    var e = (obj.id ? empById(obj.id) : null)
+      || d.employees.filter(function (x) { return norm(x.name) === norm(obj.name); })[0];
+    if (!e) throw new Error('「' + (obj.name || '?') + '」は従業員に登録されていません（先に②で登録してください）');
     var ym = d.settings.year + '-' + U.pad(d.settings.month);
     if (obj.ym && obj.ym !== ym) throw new Error('対象月が違います（提出コードは ' + obj.ym + '）');
     d.avail[e.id] = obj.avail || {};
@@ -378,7 +409,15 @@ var Store = (function () {
     var d = get();
     return d.employees.filter(function (e) { return submissionOf(e.id).status === 'submitted'; }).length;
   }
-  function isHoliday(date) { return get().settings.holidays.indexOf(date) >= 0; }
+  /** 日本の祝日か（自動計算・設定不要） */
+  function isHoliday(date) {
+    var y = +String(date).slice(0, 4);
+    return !!U.jpHolidays(y)[date];
+  }
+  function holidayName(date) {
+    var y = +String(date).slice(0, 4);
+    return U.jpHolidays(y)[date] || '';
+  }
   function isWeekendOrHoliday(date) {
     var w = U.weekdayOf(date);
     return w === 0 || w === 6 || isHoliday(date);
@@ -393,7 +432,7 @@ var Store = (function () {
     stCalc: stCalc, empById: empById, stById: stById, monthDates: monthDates,
     needOf: needOf, assignedOf: assignedOf, requestOf: requestOf,
     availOf: availOf, setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,
-    isHoliday: isHoliday, isWeekendOrHoliday: isWeekendOrHoliday
+    isHoliday: isHoliday, holidayName: holidayName, isWeekendOrHoliday: isWeekendOrHoliday
   };
 })();
 

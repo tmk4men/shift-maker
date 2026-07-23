@@ -40,11 +40,13 @@ var Solver = (function () {
         var s = slots[i];
         var cur = Rules.assignedAt(ctx, s.date, s.stId);
         if (cur.length >= s.need) continue;
-        var rr = (data.demand.roleReq || {})[s.stId] || {};
-        var rolePenalty = (rr.leader || rr.certified) ? 0 : 0.5;
-        // ①まず全枠に1人目を配る（人手不足でも「誰もいない日」を作らない）
-        // ②同じ充足率なら、候補が少ない苦しい枠を先に埋める
-        var key = (cur.length / s.need) * 10000 + quickCount(ctx, s) + rolePenalty;
+        // ①責任者・有資格者がまだ入っていない枠を最優先で埋める
+        //   （人間の店長と同じ順序。後回しにすると人が尽きて「責任者不在の日」ができる）
+        // ②次に、全枠へ1人目を配る（人手不足でも「誰もいない日」を作らない）
+        // ③同じ条件なら、候補が少ない苦しい枠から
+        var key = (missingRoles(ctx, s).length > 0 ? 0 : 1000000)
+          + (cur.length / s.need) * 10000
+          + quickCount(ctx, s);
         if (key < best) { best = key; target = s; }
       }
       if (!target) break;                        // すべて充足
@@ -132,6 +134,16 @@ var Solver = (function () {
     };
   }
 
+  /** その枠でまだ満たしていない必須役割（['leader','certified'] のうち欠けているもの） */
+  function missingRoles(ctx, slot) {
+    var rr = (ctx.data.demand.roleReq || {})[slot.stId] || {};
+    var cur = Rules.assignedAt(ctx, slot.date, slot.stId);
+    var out = [];
+    if (rr.leader && !cur.some(function (id) { return ctx.emp[id] && ctx.emp[id].leader; })) out.push('leader');
+    if (rr.certified && !cur.some(function (id) { return ctx.emp[id] && ctx.emp[id].certified; })) out.push('certified');
+    return out;
+  }
+
   /* 枠の「苦しさ」の概算：軽い条件だけで候補数を数える（全ハード判定より約20倍速い） */
   function quickCount(ctx, slot) {
     var data = ctx.data, n = 0;
@@ -144,8 +156,7 @@ var Solver = (function () {
       if (req === 'must' || req === 'paid') continue;
       if (e.minor && ctx.st[slot.stId].night > 0) continue;
       var av = Store.availOf(e.id, slot.date);
-      if (av === false) continue;
-      if (av === null && data.settings.unsubmittedPolicy === 'unavailable') continue;
+      if (av === false || av === null) continue;   // 未入力の日は出勤させない
       n++;
     }
     return n;
@@ -158,11 +169,9 @@ var Solver = (function () {
     var seatsLeft = slot.need - cur.length;
 
     // 役割の残り必要数（責任者・有資格者）
-    var rr = (data.demand.roleReq || {})[slot.stId] || {};
-    var missing = [];
-    if (rr.leader && !cur.some(function (id) { return ctx.emp[id].leader; })) missing.push('leader');
-    if (rr.certified && !cur.some(function (id) { return ctx.emp[id].certified; })) missing.push('certified');
-    var mustCoverRole = missing.length >= seatsLeft && missing.length > 0;
+    // まだ満たしていない役割があるうちは、その役割を持つ人から先に入れる
+    var missing = missingRoles(ctx, slot);
+    var mustCoverRole = missing.length > 0;
 
     var out = [], spare = [], blocked = [];
     data.employees.forEach(function (e) {
@@ -296,13 +305,9 @@ var Solver = (function () {
     });
   }
 
-  /** その枠の上限人数（既定は必要人数ちょうど＝過剰配置を作らない） */
+  /** その枠の上限人数。必要人数ちょうど＝余分な人は入れない（設定にせず固定） */
   function maxOf(data, date, stId, need) {
-    var ov = (data.demand.overrides[date] || {});
-    if (ov['max_' + stId] !== undefined && ov['max_' + stId] !== '') return +ov['max_' + stId];
-    var m = (data.demand.byWeekdayMax || {})[stId];
-    if (m && m[U.weekdayOf(date)] !== undefined && m[U.weekdayOf(date)] !== '') return +m[U.weekdayOf(date)];
-    return need + (data.settings.allowOverstaff ? 1 : 0);
+    return need;
   }
 
   function putTrace(trace, date, stId, empId, obj) {
