@@ -75,8 +75,7 @@ var Store = (function () {
         weekStartsOn: 0,        // 週の始まり 0=日曜 1=月曜
         budget: 0,              // 月間人件費予算（0=無制限）
         closedWeekdays: [],     // 定休日の曜日 [0=日 … 6=土]
-        closedDates: [],        // 臨時休業日 'YYYY-MM-DD'
-        pinHash: ''             // 管理画面の簡易ロック（空＝ロックなし）
+        closedDates: []         // 臨時休業日 'YYYY-MM-DD'
       },
       // 祝日は自動計算（util.jpHolidays）。未提出日は出勤させない。
       // 必要人数を超える配置はしない。この3つは設定にせず固定。
@@ -311,39 +310,9 @@ var Store = (function () {
   function setData(d) { data = d; migrate(); return data; }
 
   function get() { return data || load(); }
-  function reset() { data = emptyData(); save(); lockNow(); return data; }
+  function reset() { data = emptyData(); save(); return data; }
   /** 動きを試すためのサンプル店（10名）を読み込む */
   function loadDemo() { data = migrate(sampleData()); save(); return data; }
-
-  /* ---------- 管理画面の簡易ロック ----------
-     暗号学的な保護ではない。共用端末でスタッフが設定を触ってしまう事故を防ぐための蓋。 */
-  var SKEY = 'shift-maker-unlocked';
-
-  function hasPin() { return !!get().settings.pinHash; }
-  function isUnlocked() {
-    if (!hasPin()) return true;
-    try {
-      if (typeof sessionStorage === 'undefined') return false;
-      return sessionStorage.getItem(SKEY) === get().settings.pinHash;
-    } catch (e) { return false; }
-  }
-  function tryUnlock(pin) {
-    var d = get();
-    if (!d.settings.pinHash) return true;
-    if (U.pinHash(pin) !== d.settings.pinHash) return false;
-    try { if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(SKEY, d.settings.pinHash); } catch (e) { }
-    return true;
-  }
-  function lockNow() {
-    try { if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(SKEY); } catch (e) { }
-  }
-  function setPin(pin) {
-    var d = get();
-    d.settings.pinHash = pin ? U.pinHash(pin) : '';
-    save();
-    if (pin) { try { if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(SKEY, d.settings.pinHash); } catch (e) { } }
-    else lockNow();
-  }
 
   /** 初期サンプルのまま触られていないか（案内を出すかの判定用） */
   function isSample() {
@@ -509,7 +478,6 @@ var Store = (function () {
   return {
     load: load, save: save, get: get, reset: reset, setData: setData,
     isSample: isSample, startFresh: startFresh, emptyData: emptyData, loadDemo: loadDemo,
-    hasPin: hasPin, isUnlocked: isUnlocked, tryUnlock: tryUnlock, lockNow: lockNow, setPin: setPin,
     exportJson: exportJson, importJson: importJson, sampleData: sampleData,
     removeEmployee: removeEmployee, removeShiftType: removeShiftType,
     exportSubmission: exportSubmission, importSubmission: importSubmission, onSaveError: onSaveError,

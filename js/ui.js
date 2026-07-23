@@ -55,37 +55,6 @@
     });
     return s;
   }
-  /* ================= 管理画面の簡易ロック ================= */
-  var ADMIN_TABS = { setup: 1, staff: 1, rules: 1 };
-
-  /** ロック中か（PIN未設定なら常に解除扱い） */
-  function locked() { return !Store.isUnlocked(); }
-
-  /** ロックされていれば PIN を聞き、通ったら then() を実行する */
-  function requireUnlock(then) {
-    if (!locked()) { then(); return; }
-    var msg = el('p', { class: 'hint', text: '管理用のパスワードを入力してください。' });
-    var inp = input('password', '', null, { maxlength: 16, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', style: 'font-size:20px;letter-spacing:.2em;text-align:center;width:220px' });
-    function submit() {
-      if (Store.tryUnlock(inp.value)) { closeModal(); D = Store.get(); then(); }
-      else { msg.textContent = 'パスワードが違います。'; inp.value = ''; }
-    }
-    inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
-
-    var forgot = el('details', { class: 'rule', style: 'margin-top:16px' }, [
-      el('summary', { text: 'パスワードを忘れた場合' }),
-      el('p', { class: 'vd', text: '1. 右上の［書き出し］でデータをファイルに保存' }),
-      el('p', { class: 'vd', text: '2. この端末のサイトデータを削除' }),
-      el('p', { class: 'vd', text: '3. アプリを開き直して［読み込み］でそのファイルを取り込む' }),
-      el('p', { class: 'vd', text: 'ロックは解除された状態に戻ります。' })
-    ]);
-
-    modal('管理画面のロック', el('div', {}, [msg, el('div', { class: 'row' }, [inp]), forgot]), [
-      el('button', { class: 'btn', text: '解除', onclick: submit }),
-      el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
-    ]);
-  }
-
   /* ================= 手順ガイド ================= */
   /** いまどこまで進んでいて、次に何をすればいいか */
   function steps() {
@@ -293,55 +262,6 @@
 
     p.appendChild(card('必要人数（曜日別）', null, [
       el('table', {}, [el('thead', {}, [head]), el('tbody', {}, rows)])
-    ]));
-
-    /* 管理画面のロック */
-    p.appendChild(card('管理画面のロック',
-      '共用のタブレットやPCで使うとき、スタッフに設定を触られないようにします。', [
-      el('div', { class: 'row' }, [
-        el('span', { class: 'badge ' + (Store.hasPin() ? 'ok' : 'warn'), text: Store.hasPin() ? 'パスワード設定済み' : 'ロックなし' }),
-        Store.hasPin() ? el('button', {
-          class: 'btn ghost', text: 'いますぐロックする', onclick: function () {
-            Store.lockNow(); switchTab('shift'); toast('ロックしました');
-          }
-        }) : null,
-        el('button', {
-          class: 'btn ' + (Store.hasPin() ? 'ghost' : ''), text: Store.hasPin() ? 'パスワードを変更する' : 'パスワードを設定する',
-          onclick: function () {
-            var i1 = input('password', '', null, { maxlength: 16, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', style: 'font-size:18px;letter-spacing:.2em;text-align:center;width:200px' });
-            var i2 = input('password', '', null, { maxlength: 16, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', style: 'font-size:18px;letter-spacing:.2em;text-align:center;width:200px' });
-            var msg = el('p', { class: 'hint', text: '4〜16文字の英数字で決めてください（大文字と小文字は区別します）。' });
-            modal('管理画面のパスワード', el('div', {}, [
-              msg,
-              el('div', { class: 'row' }, [field('新しいパスワード', i1), field('もう一度', i2)]),
-              el('div', { class: 'violation hard', style: 'margin-top:16px' }, [
-                el('div', { class: 'vt', text: '忘れると管理画面を開けなくなります' }),
-                el('div', { class: 'vd', text: '設定前に［書き出し］でバックアップを。' })
-              ])
-            ]), [
-              el('button', {
-                class: 'btn', text: '設定する', onclick: function () {
-                  if (!/^[0-9A-Za-z_-]{4,16}$/.test(i1.value)) {
-                    msg.textContent = '4〜16文字の英数字（- と _ も可）で入れてください。'; return;
-                  }
-                  if (i1.value !== i2.value) { msg.textContent = '2つの入力が一致しません。'; return; }
-                  Store.setPin(i1.value); closeModal(); D = Store.get(); render();
-                  toast('パスワードを設定しました');
-                }
-              }),
-              el('button', { class: 'btn ghost', text: 'やめる', onclick: closeModal })
-            ]);
-          }
-        }),
-        Store.hasPin() ? el('button', {
-          class: 'btn ghost danger', text: 'パスワードを解除する', onclick: function () {
-            if (!confirm('パスワードを解除します。誰でも設定を変更できる状態になります。よろしいですか？')) return;
-            Store.setPin(''); D = Store.get(); render(); toast('パスワードを解除しました');
-          }
-        }) : null
-      ]),
-      el('p', { class: 'hint', style: 'margin:12px 0 0', text:
-        'ロック中は ①基本設定・②従業員・⑥ルール設定 が開けません。シフト表と集計は見られます。' })
     ]));
 
     /* 特定日の調整 */
@@ -1804,10 +1724,6 @@
 
   /* ================= タブ・初期化 ================= */
   function switchTab(name) {
-    if (ADMIN_TABS[name] && locked()) {
-      requireUnlock(function () { switchTab(name); });
-      return;
-    }
     currentTab = name;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
       t.classList.toggle('active', t.dataset.tab === name);
@@ -1823,16 +1739,6 @@
     if (inputMode) return renderInputPage();
     if (staffOnly) return renderStaffOnly();
 
-    // ロック中に管理タブが開いたままにならないようにする（起動直後もここを通る）
-    if (ADMIN_TABS[currentTab] && locked()) {
-      currentTab = 'shift';
-      Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
-        t.classList.toggle('active', t.dataset.tab === currentTab);
-      });
-      Array.prototype.forEach.call(document.querySelectorAll('.panel'), function (pn) {
-        pn.classList.toggle('hidden', pn.id !== 'panel-' + currentTab);
-      });
-    }
 
     if (currentTab === 'setup') renderSetup();
     if (currentTab === 'staff') renderStaff();
@@ -1854,7 +1760,7 @@
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
   document.getElementById('btnExport').addEventListener('click', function () { Store.exportJson(); });
   document.getElementById('btnImport').addEventListener('click', function () {
-    requireUnlock(function () { document.getElementById('fileImport').click(); });
+    document.getElementById('fileImport').click();
   });
   document.getElementById('fileImport').addEventListener('change', function (e) {
     var f = e.target.files[0]; if (!f) return;
@@ -1871,10 +1777,8 @@
     e.target.value = '';
   });
   document.getElementById('btnReset').addEventListener('click', function () {
-    requireUnlock(function () {
-      if (!confirm('すべてのデータを初期状態に戻します。よろしいですか？')) return;
-      D = Store.reset(); render(); toast('初期化しました');
-    });
+    if (!confirm('すべてのデータを初期状態に戻します。よろしいですか？')) return;
+    D = Store.reset(); render(); toast('初期化しました');
   });
 
   render();
