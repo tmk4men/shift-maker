@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>シフト自動作成（ルールベース・ローカル完結）</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="logo">🗓️</span>
+    <div>
+      <h1>シフト自動作成</h1>
+      <p class="sub">ルールブック方式・AI不使用・ブラウザ内で完結</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button id="btnExport" class="btn ghost">書き出し</button>
+    <button id="btnImport" class="btn ghost">読み込み</button>
+    <input type="file" id="fileImport" accept="application/json" hidden>
+    <button id="btnReset" class="btn ghost danger">初期化</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="setup">① 基本設定</button>
+  <button class="tab" data-tab="staff">② 従業員</button>
+  <button class="tab" data-tab="request">③ 希望・提出</button>
+  <button class="tab" data-tab="shift">④ シフト表</button>
+  <button class="tab" data-tab="summary">⑤ 集計</button>
+  <button class="tab" data-tab="rules">⑥ ルール設定</button>
+</nav>
+
+<main id="main">
+  <section class="panel" id="panel-setup"></section>
+  <section class="panel hidden" id="panel-staff"></section>
+  <section class="panel hidden" id="panel-request"></section>
+  <section class="panel hidden" id="panel-shift"></section>
+  <section class="panel hidden" id="panel-summary"></section>
+  <section class="panel hidden" id="panel-rules"></section>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head"><h3 id="modalTitle">タイトル</h3><button id="modalClose" class="btn ghost">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/solver.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+
+# 個人メモ（公開しない）
+お侍さん/
+CLAUDE.md
