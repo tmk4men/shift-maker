@@ -40,7 +40,7 @@ function makeNode(tag) {
 
 const byId = {};
 ['modal', 'modalTitle', 'modalBody', 'modalFoot', 'modalClose', 'toast', 'tabs', 'modes',
-  'btnExport', 'btnImport', 'btnReset', 'fileImport', 'fileRequests', 'panel-input',
+  'btnMenu', 'fileImport', 'fileRequests', 'panel-input',
   'panel-setup', 'panel-staff', 'panel-request', 'panel-shift', 'panel-summary']
   .forEach(id => { byId[id] = makeNode('div'); byId[id].id = id; });
 
@@ -229,7 +229,36 @@ tryRun('CSV出力', () => {
   findButton(byId['panel-shift'], 'CSV出力').click();
 });
 
-tryRun('初期化ボタン', () => byId['btnReset'].click());
+tryRun('メニューが開く', () => {
+  byId['btnMenu'].click();
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  ['はじめての方へ', 'スタッフへの渡し方', 'このアプリの決まり', '書き出し', '読み込み', 'サンプルの店を読み込む', '全部消して最初から']
+    .forEach(t => { if (txt.indexOf(t) < 0) throw new Error('メニューに「' + t + '」がない'); });
+});
+
+tryRun('メニューから使い方が開ける', () => {
+  byId['btnMenu'].click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === 'はじめての方へ');
+  b.click();
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('責任者がやること') < 0) throw new Error('使い方が出ない');
+  if (txt.indexOf('スタッフがやること') < 0) throw new Error('スタッフ向けの説明がない');
+});
+
+tryRun('メニューから決まりが読める', () => {
+  byId['btnMenu'].click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === 'このアプリの決まり');
+  b.click();
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('未入力の日は出勤させません') < 0) throw new Error('固定ルールの説明がない');
+  if (txt.indexOf('法令は必ず守ります') < 0) throw new Error('法令の説明がない');
+});
+
+tryRun('メニューから初期化できる', () => {
+  byId['btnMenu'].click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('全部消して最初から') >= 0);
+  b.click();
+});
 
 /* ---------- 使う人の切り替え（スタッフ / 責任者） ---------- */
 console.log('\n=== 使う人の切り替え ===');

@@ -63,6 +63,84 @@
     });
     return s;
   }
+  /* ================= メニュー（使い方・データ） ================= */
+  function menuSection(title, rows) {
+    return el('div', { style: 'margin-bottom:24px' }, [el('h4', { text: title })].concat(rows));
+  }
+  function menuItem(label, desc, onclick, cls) {
+    return el('div', { style: 'padding:8px 0;border-bottom:1px solid var(--line)' }, [
+      el('button', { class: 'btn ' + (cls || 'ghost'), text: label, onclick: onclick, style: 'width:100%;justify-content:center' }),
+      desc ? el('div', { class: 'vd', style: 'margin-top:4px', text: desc }) : null
+    ]);
+  }
+
+  function openMenu() {
+    var b = el('div', {}, [
+      menuSection('使い方', [
+        menuItem('はじめての方へ', '準備からシフト作成までの流れ', showHowToUse),
+        menuItem('スタッフへの渡し方', '希望を集める手順', showHowToCollect),
+        menuItem('このアプリの決まり', '変更できない動きの説明', showFixedRules)
+      ]),
+      menuSection('データ', [
+        menuItem('書き出し（バックアップ）', 'ファイルに保存します', function () { closeModal(); Store.exportJson(); }),
+        menuItem('読み込み', '書き出したファイルを戻します', function () {
+          closeModal(); document.getElementById('fileImport').click();
+        }),
+        menuItem('サンプルの店を読み込む', '動きを見たいとき（今の内容は消えます）', function () {
+          if (!confirm('サンプルの店（10名・1か月分の希望入り）を読み込みます。\n今の内容は上書きされます。よろしいですか？')) return;
+          D = Store.loadDemo(); closeModal(); render();
+          toast('サンプルを読み込みました');
+        }),
+        menuItem('全部消して最初から', '', function () {
+          if (!confirm('すべてのデータを消して最初からにします。よろしいですか？')) return;
+          D = Store.reset(); closeModal(); render(); toast('初期化しました');
+        }, 'ghost danger')
+      ])
+    ]);
+    modal('メニュー', b, [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
+  }
+
+  function showHowToUse() {
+    modal('はじめての方へ', el('div', {}, [
+      el('p', {}, [el('strong', { text: '責任者がやること' })]),
+      el('p', { class: 'hint', text: '1. 準備 … 対象月・勤務区分・曜日ごとの必要人数・お店の休みを決める' }),
+      el('p', { class: 'hint', text: '2. スタッフ … 名前と時給を登録。該当する人だけ属性にチェック' }),
+      el('p', { class: 'hint', text: '3. 希望を集める … スタッフから受け取った希望を取り込む' }),
+      el('p', { class: 'hint', text: '4. シフト表 … ［シフトを作成する］。セルを押せば手直しできます' }),
+      el('p', { class: 'hint', text: '5. 集計 … 労働時間・夜勤回数・人件費・年収の壁を確認' }),
+      el('p', { style: 'margin-top:16px' }, [el('strong', { text: 'スタッフがやること' })]),
+      el('p', { class: 'hint', text: '画面上の［シフト希望を出す］を押して、名前と行ける日時を入力するだけです。' }),
+      el('p', { style: 'margin-top:16px' }, [el('strong', { text: '画面の上の案内' })]),
+      el('p', { class: 'hint', text: '「次にやること」が常に出ます。迷ったらそれに従ってください。' })
+    ]), [el('button', { class: 'btn ghost', text: '戻る', onclick: openMenu })]);
+  }
+
+  function showFixedRules() {
+    modal('このアプリの決まり', el('div', {}, [
+      el('p', { class: 'hint', text: '手間を減らすため、次の動きは設定にせず固定しています。' }),
+      el('div', { class: 'violation' }, [
+        el('div', { class: 'vt', text: '希望が未入力の日は出勤させません' }),
+        el('div', { class: 'vd', text: '入れていいか分からない人を勝手に入れないためです。全く入力のない人はシフトに入りません。' })
+      ]),
+      el('div', { class: 'violation' }, [
+        el('div', { class: 'vt', text: '必要人数を超える人は入れません' }),
+        el('div', { class: 'vd', text: '人件費が無駄に増えるのを防ぎます。' })
+      ]),
+      el('div', { class: 'violation' }, [
+        el('div', { class: 'vt', text: '祝日は自動で判定します' }),
+        el('div', { class: 'vd', text: '振替休日・国民の休日・春分秋分まで計算します。お店の休みは「1. 準備」で別に設定できます。' })
+      ]),
+      el('div', { class: 'violation hard' }, [
+        el('div', { class: 'vt', text: '法令は必ず守ります' }),
+        el('div', { class: 'vd', text: '18歳未満の深夜勤務、週40時間、休憩、週1日の休日、時間外の月45時間。これらは設定で外せません。' })
+      ]),
+      el('div', { class: 'violation hard' }, [
+        el('div', { class: 'vt', text: 'データはこの端末にだけ保存されます' }),
+        el('div', { class: 'vd', text: '別の端末とは共有されません。大事な月はメニューの［書き出し］でファイルに残してください。' })
+      ])
+    ]), [el('button', { class: 'btn ghost', text: '戻る', onclick: openMenu })]);
+  }
+
   /* ================= 手順ガイド ================= */
   /** いまどこまで進んでいて、次に何をすればいいか */
   function steps() {
@@ -119,39 +197,15 @@
     var p = document.getElementById('panel-setup'); p.innerHTML = '';
     var s = D.settings;
 
-    /* まだ何も登録されていないときの案内 */
+    /* まだ何も登録されていないときだけ、次の一歩を出す */
     if (!D.employees.length) {
-      p.appendChild(card('はじめに',
-        'このページで「勤務区分」と「曜日ごとの必要人数」を決めてから、［② 従業員］に進んでください。', [
+      p.appendChild(card('まず勤務区分と必要人数を決めてください', null, [
         el('div', { class: 'row' }, [
-          el('button', { class: 'btn', text: '② 従業員の登録へ進む', onclick: function () { switchTab('staff'); } }),
-          el('button', {
-            class: 'btn ghost', text: 'サンプルの店で動きを見る', onclick: function () {
-              if (!confirm('サンプルの店（10名・1か月分の希望入り）を読み込みます。\n今の内容は上書きされます。よろしいですか？')) return;
-              D = Store.loadDemo(); render();
-              toast('サンプルを読み込みました。［④ シフト表］で作成を試せます');
-            }
-          })
+          el('button', { class: 'btn', text: '2. スタッフの登録へ進む', onclick: function () { switchTab('staff'); } }),
+          el('button', { class: 'btn ghost', text: '使い方を見る', onclick: showHowToUse })
         ])
       ]));
-    } else if (Store.isSample()) {
-      p.appendChild(card('いまはサンプルの店です',
-        '自分の店で使うときは、下のボタンで空にしてから始めてください。', [
-        el('button', {
-          class: 'btn ghost danger', text: '全部消して空から始める', onclick: function () {
-            if (!confirm('従業員・希望・シフトをすべて消して、空の状態から始めます。よろしいですか？')) return;
-            D = Store.startFresh(); currentTab = 'setup'; render();
-            toast('空にしました');
-          }
-        })
-      ]));
     }
-
-    /* データの保存場所についての注意（消えると困るので最初に伝える） */
-    p.appendChild(el('div', { class: 'violation', style: 'margin-bottom:16px' }, [
-      el('div', { class: 'vt', text: 'データはこの端末にのみ保存されます' }),
-      el('div', { class: 'vd', text: '右上の［書き出し］でバックアップできます。' })
-    ]));
 
     p.appendChild(card('店舗・対象月', null, [
       el('div', { class: 'row' }, [
@@ -1663,10 +1717,8 @@
   });
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
-  document.getElementById('btnExport').addEventListener('click', function () { Store.exportJson(); });
-  document.getElementById('btnImport').addEventListener('click', function () {
-    document.getElementById('fileImport').click();
-  });
+  var menuBtn = document.getElementById('btnMenu');
+  if (menuBtn) menuBtn.addEventListener('click', openMenu);
   document.getElementById('fileImport').addEventListener('change', function (e) {
     var f = e.target.files[0]; if (!f) return;
     var r = new FileReader();
@@ -1680,10 +1732,6 @@
   document.getElementById('fileRequests').addEventListener('change', function (e) {
     importRequestFiles(e.target.files);
     e.target.value = '';
-  });
-  document.getElementById('btnReset').addEventListener('click', function () {
-    if (!confirm('すべてのデータを初期状態に戻します。よろしいですか？')) return;
-    D = Store.reset(); render(); toast('初期化しました');
   });
 
   render();

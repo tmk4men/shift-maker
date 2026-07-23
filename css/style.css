@@ -398,3 +398,13 @@ details.rule[open] summary::before{content:'▾ '}
   .cell-shift,td.sat,td.sun,th.sat,th.sun{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .violation,.grid2,.stat{break-inside:avoid}
 }
+
+/* ---------- メニューボタン ---------- */
+.menu-btn{
+  min-width:44px;padding:8px 12px;display:inline-flex;align-items:center;justify-content:center;
+}
+.menu-btn svg{fill:currentColor;display:block}
+.modal-body h4{
+  font-size:13px;color:var(--muted);letter-spacing:.06em;
+  padding-bottom:8px;border-bottom:1px solid var(--line-2);margin:0 0 8px;
+}
