@@ -640,6 +640,45 @@ tryRun('1日に複数の時間帯を出せる', () => {
   if (txt.indexOf('08:00') < 0) throw new Error('表示用の文字が作れない: ' + txt);
 });
 
+tryRun('1週間に入れる回数の上限を守る', () => {
+  sandbox.Store.loadDemo();
+  const d = sandbox.Store.get();
+  d.employees.forEach(e => {
+    e.weeklyDaysCap = 2;
+    d.avail[e.id] = {}; d.requests[e.id] = {};
+    sandbox.Store.monthDates().forEach(x => { d.avail[e.id][x] = { allday: true }; });
+  });
+  sandbox.Store.save();
+
+  const res = sandbox.Solver.generate(sandbox.Store.get());
+  const shiftOf = {};
+  d.employees.forEach(e => { shiftOf[e.id] = {}; });
+  Object.keys(res.assignments).forEach(dt =>
+    Object.keys(res.assignments[dt] || {}).forEach(st =>
+      (res.assignments[dt][st] || []).forEach(id => { if (shiftOf[id]) shiftOf[id][dt] = st; })));
+
+  const over = [];
+  d.employees.forEach(e => {
+    const wk = {};
+    sandbox.Store.monthDates().forEach(dt => {
+      if (!shiftOf[e.id][dt]) return;
+      const k = sandbox.Rules.weekKey(d, dt);
+      wk[k] = (wk[k] || 0) + 1;
+      if (wk[k] > 2) over.push(e.name + ' ' + k + '=' + wk[k] + '回');
+    });
+  });
+  if (over.length) throw new Error('週2回を超えて入っている: ' + over.slice(0, 3).join(' / '));
+
+  // 画面にも出ていること
+  openTab('staff');
+  const txt = byId['panel-staff'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('週2回') < 0) throw new Error('一覧に週の回数が出ていない');
+  findButton(byId['panel-staff'], '編集').click();
+  const dlg = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  if (dlg.indexOf('週に入れる回数') < 0) throw new Error('編集画面に週の回数の設定がない');
+  byId['modalClose'].click();
+});
+
 /* ---------- マウスがなくても操作できるか ---------- */
 console.log('\n=== キーボードと読み上げ ===');
 

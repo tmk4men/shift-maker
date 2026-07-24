@@ -48,7 +48,8 @@ var Rules = (function () {
     { id: 'OPS-A03', cat: 'ops', name: '教育ペアの優先', type: 'soft', weight: 800, params: {}, desc: '新人と担当トレーナーを同じ勤務に寄せる。' },
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者を使いすぎない', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
     { id: 'OPS-A05', cat: 'ops', name: '月のはじめと終わりで偏らせない', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' },
-    { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の勤務時間の上限を決められます。' }
+    { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の勤務時間の上限を決められます。' },
+    { id: 'OPS-A08', cat: 'ops', name: '週の出勤回数の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間に何回まで入れるかを決められます。' }
   ];
 
   var DEF_MAP = {};
@@ -91,7 +92,7 @@ var Rules = (function () {
     data.employees.forEach(function (e) {
       ctx.emp[e.id] = e;
       ctx.shiftOf[e.id] = {};
-      ctx.stats[e.id] = { days: 0, minutes: 0, nightMin: 0, nights: 0, weekends: 0, pay: 0, dates: [], week: {}, weekOt: {} };
+      ctx.stats[e.id] = { days: 0, minutes: 0, nightMin: 0, nights: 0, weekends: 0, pay: 0, dates: [], week: {}, weekOt: {}, weekDays: {} };
       ctx.carry[e.id] = { nights: 0, weekends: 0 };
     });
 
@@ -143,6 +144,7 @@ var Rules = (function () {
     s.pay += sign * payOf(e, c);
     var wk = weekKey(ctx.data, date);
     s.week[wk] = (s.week[wk] || 0) + sign * c.work;
+    s.weekDays[wk] = (s.weekDays[wk] || 0) + sign;
     s.weekOt[wk] = (s.weekOt[wk] || 0) + sign * Math.max(0, c.work - 480);   // 1日8時間超＝法定時間外
     if (sign > 0) { s.dates.push(date); s.dates.sort(); }
     else { var i = s.dates.indexOf(date); if (i >= 0) s.dates.splice(i, 1); }
@@ -292,6 +294,11 @@ var Rules = (function () {
     // 本人ごとの週上限（社会保険の週20時間ラインの調整に使う）
     if (on(data, 'OPS-A07') && e.weeklyHoursCap > 0 && wmin > e.weeklyHoursCap * 60)
       ng('OPS-A07', '週の上限' + e.weeklyHoursCap + '時間を超えます（この週 ' + U.min2h(wmin) + 'h）');
+
+    // 本人ごとの週の出勤回数
+    var wdays = (ctx.stats[empId].weekDays[wk] || 0) + 1;
+    if (on(data, 'OPS-A08') && e.weeklyDaysCap > 0 && wdays > e.weeklyDaysCap)
+      ng('OPS-A08', '週' + e.weeklyDaysCap + '回までの設定を超えます（この週 ' + wdays + '回目）');
 
     // 連勤（法定：週1休 → 最大6連勤）
     var run = runLength(ctx, empId, date);
@@ -566,6 +573,12 @@ var Rules = (function () {
         push('hard', 'OPS-035', e.name + 'さん：月間上限' + e.maxHoursMonth + '時間に対し' + U.min2h(s.minutes) + '時間', '', '', e.id);
       if (e.maxNights > 0 && s.nights > e.maxNights)
         push('hard', 'OPS-064', e.name + 'さん：月間夜勤上限' + e.maxNights + '回に対し' + s.nights + '回', '', '', e.id);
+      if (e.weeklyDaysCap > 0) {
+        Object.keys(s.weekDays).forEach(function (wk) {
+          if (s.weekDays[wk] > e.weeklyDaysCap)
+            push('hard', 'OPS-A08', e.name + 'さん：' + wk + 'の週が' + s.weekDays[wk] + '回（週' + e.weeklyDaysCap + '回までの設定を超過）', '', '', e.id);
+        });
+      }
       if (e.weeklyHoursCap > 0) {
         Object.keys(s.week).forEach(function (wk) {
           if (s.week[wk] > e.weeklyHoursCap * 60)

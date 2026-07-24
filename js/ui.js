@@ -559,6 +559,7 @@
         el('td', { text: e.canShift.map(function (id) { var s = Store.stById(id); return s ? s.short || s.name : ''; }).join('/') }),
         el('td', { class: 'right', text: e.minDays + '〜' + e.maxDays + '日' }),
         el('td', { class: 'right', text: e.maxConsecutive + '連勤' }),
+        el('td', { class: 'right', text: e.weeklyDaysCap > 0 ? '週' + e.weeklyDaysCap + '回' : '—' }),
         el('td', { class: 'right', text: priorityLabel(e.priority) }),
         el('td', {}, [
           iconOnly('edit', e.name + ' を編集', { onclick: function () { editEmp(e); } }),
@@ -574,7 +575,7 @@
 
     p.appendChild(card('従業員', null, [
       el('div', { class: 'scroll' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['氏名 / 属性', '担当可能', '出勤日数', '連勤上限', '優先度', ''].map(function (h) { return el('th', { text: h }); }))]),
+        el('thead', {}, [el('tr', {}, ['氏名 / 属性', '担当可能', '出勤日数', '連勤上限', '週の回数', '優先度', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
       ])]),
       el('div', { style: 'margin-top:12px' }, [iconBtn('plus', '従業員を追加', {
@@ -631,6 +632,7 @@
       field('月の最低時間（0＝なし）', input('number', e.minHoursMonth, function (ev) { e.minHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の上限時間（0＝なし）', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の夜勤上限（0＝なし）', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
+      field('週に入れる回数の上限（0＝なし）', input('number', e.weeklyDaysCap, function (ev) { e.weeklyDaysCap = U.num(ev.target.value, 0, 7, 0); }, { min: 0, max: 7 })),
       field('週の上限時間（0＝なし）', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
       field('優先度', select([
         { v: '', t: '未入力' }, { v: 0, t: '0（ふつう）' }, { v: 1, t: '1（優先する）' }

@@ -36,7 +36,7 @@ var Store = (function () {
         canShift: shiftTypes.map(function (s) { return s.id; }),
         ngWeekdays: [], priority: 0,
         minDays: 0, maxDays: 22, minHoursMonth: 0, maxHoursMonth: 0,
-        maxConsecutive: 5, maxNights: 0, weeklyHoursCap: 0,
+        maxConsecutive: 5, maxNights: 0, weeklyHoursCap: 0, weeklyDaysCap: 0,
         ngPartners: [], goodPartners: [], trainerId: '',
         incomeCap: 0, ytdEarnings: 0, note: ''
       }, o);
@@ -235,7 +235,7 @@ var Store = (function () {
       if (!e.id) e.id = U.uid('e');
       if (!e.name) e.name = '従業員' + (i + 1);
       e.wage = Math.max(0, +e.wage || 0);
-      ['minDays', 'maxDays', 'minHoursMonth', 'maxHoursMonth', 'maxConsecutive', 'maxNights', 'weeklyHoursCap', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
+      ['minDays', 'maxDays', 'minHoursMonth', 'maxHoursMonth', 'maxConsecutive', 'maxNights', 'weeklyHoursCap', 'weeklyDaysCap', 'incomeCap', 'ytdEarnings'].forEach(function (k) {
         e[k] = Math.max(0, +e[k] || 0);
       });
       e.priority = Math.max(-3, Math.min(3, +e.priority || 0));
@@ -377,7 +377,7 @@ var Store = (function () {
     e.wage = 1100; e.employment = 'part';
     e.leader = false; e.certified = false; e.trainer = false; e.newbie = false; e.minor = false;
     e.priority = 0; e.minDays = 0; e.maxDays = 20; e.maxConsecutive = 5;
-    e.minHoursMonth = 0; e.maxHoursMonth = 0; e.maxNights = 0; e.weeklyHoursCap = 0;
+    e.minHoursMonth = 0; e.maxHoursMonth = 0; e.maxNights = 0; e.weeklyHoursCap = 0; e.weeklyDaysCap = 0;
     e.incomeCap = 0; e.ytdEarnings = 0; e.note = '';
     e.ngPartners = []; e.goodPartners = []; e.trainerId = ''; e.ngWeekdays = [];
     e.canShift = d.shiftTypes.map(function (s) { return s.id; });
