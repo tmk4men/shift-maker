@@ -672,10 +672,10 @@ tryRun('1週間に入れる回数の上限を守る', () => {
   // 画面にも出ていること
   openTab('staff');
   const txt = byId['panel-staff'].all().map(n => n._text || '').join(' ');
-  if (txt.indexOf('週2回') < 0) throw new Error('一覧に週の回数が出ていない');
+  if (txt.indexOf('2日') < 0) throw new Error('一覧に週の日数が出ていない');
   findButton(byId['panel-staff'], '編集').click();
   const dlg = byId['modalBody'].all().map(n => n._text || '').join(' ');
-  if (dlg.indexOf('週の出勤回数') < 0) throw new Error('編集画面に週の回数の設定がない');
+  if (dlg.indexOf('入れたい日数/週') < 0) throw new Error('編集画面に日数/週の設定がない');
   byId['modalClose'].click();
 });
 

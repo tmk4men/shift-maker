@@ -49,7 +49,7 @@ var Rules = (function () {
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者を使いすぎない', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
     { id: 'OPS-A05', cat: 'ops', name: '月のはじめと終わりで偏らせない', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' },
     { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の勤務時間の上限を決められます。' },
-    { id: 'OPS-A08', cat: 'ops', name: '週の出勤回数の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の出勤回数の上限を決められます。' }
+    { id: 'OPS-A08', cat: 'ops', name: '入れたい日数/週', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間に入れる日数の上限を決められます。' }
   ];
 
   var DEF_MAP = {};
@@ -298,7 +298,7 @@ var Rules = (function () {
     // 本人ごとの週の出勤回数
     var wdays = (ctx.stats[empId].weekDays[wk] || 0) + 1;
     if (on(data, 'OPS-A08') && e.weeklyDaysCap > 0 && wdays > e.weeklyDaysCap)
-      ng('OPS-A08', '週' + e.weeklyDaysCap + '回までの設定を超えます（この週 ' + wdays + '回目）');
+      ng('OPS-A08', '1週間に入れるのは' + e.weeklyDaysCap + '日までの設定です（この週 ' + wdays + '日目）');
 
     // 連勤（法定：週1休 → 最大6連勤）
     var run = runLength(ctx, empId, date);
@@ -576,7 +576,7 @@ var Rules = (function () {
       if (e.weeklyDaysCap > 0) {
         Object.keys(s.weekDays).forEach(function (wk) {
           if (s.weekDays[wk] > e.weeklyDaysCap)
-            push('hard', 'OPS-A08', e.name + 'さん：' + wk + 'の週が' + s.weekDays[wk] + '回（週' + e.weeklyDaysCap + '回までの設定を超過）', '', '', e.id);
+            push('hard', 'OPS-A08', e.name + 'さん：' + wk + 'の週が' + s.weekDays[wk] + '日（入れたい日数/週 ' + e.weeklyDaysCap + '日を超過）', '', '', e.id);
         });
       }
       if (e.weeklyHoursCap > 0) {
