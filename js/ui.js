@@ -316,15 +316,6 @@
         menuItem('このアプリの決まり', '変更できない動きの説明', showFixedRules)
       ]),
       menuSection('データ', [
-        menuItem('バックアップを保存', 'ファイルに書き出します', function () { closeModal(); Store.exportJson(); }),
-        menuItem('読み込み', '書き出したファイルを戻します', function () {
-          closeModal(); document.getElementById('fileImport').click();
-        }),
-        menuItem('サンプルの店を読み込む', '今の内容は消えます', function () {
-          if (!confirm('サンプルの店（10名・1か月分の希望入り）を読み込みます。\n今の内容は上書きされます。よろしいですか？')) return;
-          D = Store.loadDemo(); closeModal(); render();
-          toast('サンプルを読み込みました');
-        }),
         menuItem('この月のシフトを消す', '希望や登録はそのまま残ります', function () {
           if (!confirm(D.settings.month + '月のシフトを消します。よろしいですか？（他の月は残ります）')) return;
           var prefix = D.settings.year + '-' + U.pad(D.settings.month);
@@ -459,8 +450,8 @@
         el('td', { class: 'nowrap', text: U.min2h(c.work) + 'h' }),
         el('td', { class: 'nowrap', text: c.night > 0 ? U.min2h(c.night) + 'h' : '—' }),
         el('td', {}, [warn ? el('span', { class: 'badge ng', text: warn }) : el('span', { class: 'badge ok', text: 'OK' })]),
-        el('td', {}, [iconBtn('trash', '削除', {
-          class: 'btn ghost sm danger', onclick: function () {
+        el('td', {}, [iconOnly('trash', st.name + ' を削除', {
+          class: 'btn ghost sm danger icon-only', onclick: function () {
             if (D.shiftTypes.length <= 1) return toast('最低1つは必要です');
             if (!confirm(st.name + ' を削除します。\n作成済みシフトのこの勤務、必要人数の設定、各人の「担当できる勤務区分」からも削除されます。よろしいですか？')) return;
             Store.removeShiftType(st.id); D = Store.get(); render();
@@ -541,9 +532,9 @@
         el('td', { class: 'right', text: e.maxConsecutive + '連勤' }),
         el('td', { class: 'right', text: priorityLabel(e.priority) }),
         el('td', {}, [
-          iconBtn('edit', '編集', { class: 'btn ghost sm', onclick: function () { editEmp(e); } }),
-          iconBtn('trash', '削除', {
-            class: 'btn ghost sm danger', onclick: function () {
+          iconOnly('edit', e.name + ' を編集', { onclick: function () { editEmp(e); } }),
+          iconOnly('trash', e.name + ' を削除', {
+            class: 'btn ghost sm danger icon-only', onclick: function () {
               if (!confirm(e.name + ' さんを削除します。\n作成済みシフト・希望・提出内容・相性設定からも削除されます。よろしいですか？')) return;
               Store.removeEmployee(e.id); D = Store.get(); render();
             }
@@ -552,7 +543,7 @@
       ]);
     });
 
-    p.appendChild(card('従業員', '時給と扶養の設定は、本人がシフト希望と一緒に送ってきます。', [
+    p.appendChild(card('従業員', null, [
       el('div', { class: 'scroll' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['氏名 / 属性', '担当可能', '出勤日数', '連勤上限', '優先度', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
@@ -735,7 +726,7 @@
             switchTab('shift'); doGenerate();
           }
         }),
-        iconBtn('download', '希望を取り込む', { class: 'btn ghost', onclick: importDialog }),
+        iconBtn('download', '希望を取り込む', { class: 'btn ghost', onclick: importCodeDialog }),
         iconBtn('share', 'スタッフへの渡し方', { class: 'btn ghost', onclick: showHowToCollect })
       ]),
       el('div', { class: 'scroll' }, [el('table', {}, [
@@ -778,24 +769,8 @@
       el('p', { class: 'hint', text: '3. 名前と、行ける日・時間を入れる' }),
       el('p', { class: 'hint', text: '4. ［LINEなどで送る］を押して、責任者に送る' }),
       el('p', { style: 'margin-top:16px' }, [el('strong', { text: '責任者がやること' })]),
-      el('p', { class: 'hint', text: '送られてきた文をコピーして、［コードを貼り付けて取り込む］に貼るだけです。名前や日時ごと貼っても大丈夫です。何人分でも一度に取り込めます。' })
+      el('p', { class: 'hint', text: '送られてきた文をコピーして、［希望を取り込む］に貼るだけです。名前や日時ごと貼っても大丈夫です。何人分でも一度に取り込めます。' })
     ]), [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
-  }
-
-  /** 希望ファイルをまとめて読み、誰のものかを確認してから取り込む */
-  function importRequestFiles(files) {
-    var items = [], ngList = [], pending = files.length;
-    if (!pending) return;
-    Array.prototype.forEach.call(files, function (f) {
-      var r = new FileReader();
-      r.onload = function () {
-        try { items.push({ src: f.name, obj: decodeCode(r.result) }); }
-        catch (err) { ngList.push(f.name + '：' + err.message); }
-        if (--pending === 0) showAssignDialog(items, ngList);
-      };
-      r.onerror = function () { ngList.push(f.name + '：読めませんでした'); if (--pending === 0) showAssignDialog(items, ngList); };
-      r.readAsText(f);
-    });
   }
 
   /** 「これは誰の希望か」をプルダウンで確認してから取り込む画面 */
@@ -886,18 +861,6 @@
         }
       })
     ]);
-  }
-
-  /** 取り込み口をひとまとめにする（貼り付け／ファイル） */
-  function importDialog() {
-    var b = el('div', {}, [
-      el('p', { class: 'hint', text: 'スタッフから届いたものを、そのまま取り込みます。' }),
-      menuItem('送られてきた文を貼り付ける', 'LINEなどの文をそのまま貼ればOK', function () { closeModal(); importCodeDialog(); }, ''),
-      menuItem('ファイルから読み込む', '［ファイルに保存］で受け取った場合', function () {
-        closeModal(); document.getElementById('fileRequests').click();
-      })
-    ]);
-    modal('希望を取り込む', b, [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
   }
 
   function importCodeDialog() {
@@ -1089,8 +1052,8 @@
     var idx = U.monthDates(cfg.year, cfg.month).indexOf(date);
     var all = U.monthDates(cfg.year, cfg.month);
     var foot = [];
-    if (idx > 0) foot.push(iconBtn('prev', '前の日', { class: 'btn ghost', onclick: function () { cfg.after(); dayBox(cfg, all[idx - 1]); } }));
-    if (idx < all.length - 1) foot.push(iconBtn('next', '次の日', { class: 'btn ghost', onclick: function () { cfg.after(); dayBox(cfg, all[idx + 1]); } }));
+    if (idx > 0) foot.push(iconOnly('prev', '前の日', { class: 'btn ghost icon-only', onclick: function () { cfg.after(); dayBox(cfg, all[idx - 1]); } }));
+    if (idx < all.length - 1) foot.push(iconOnly('next', '次の日', { class: 'btn ghost icon-only', onclick: function () { cfg.after(); dayBox(cfg, all[idx + 1]); } }));
     foot.push(el('button', { class: 'btn', text: '閉じる', onclick: function () { cfg.after(); closeModal(); } }));
 
     modal(title, b, foot);
@@ -1226,9 +1189,9 @@
     var res = D.lastResult;
 
     var head = el('div', { class: 'row', style: 'margin-bottom:8px;align-items:center' }, [
-      iconBtn('prev', '前月', { class: 'btn ghost sm', onclick: function () { moveMonth(-1); } }),
+      iconOnly('prev', '前の月', { onclick: function () { moveMonth(-1); } }),
       el('strong', { style: 'font-size:16px', text: D.settings.year + '年 ' + D.settings.month + '月' }),
-      iconBtn('next', '翌月', { class: 'btn ghost sm', onclick: function () { moveMonth(1); } })
+      iconOnly('next', '次の月', { onclick: function () { moveMonth(1); } })
     ]);
     var act = el('div', { class: 'row', style: 'margin-bottom:12px' }, [
       el('button', { class: 'btn big', text: 'シフトを自動作成', onclick: doGenerate }),
@@ -1266,11 +1229,11 @@
           var st = Store.stById(stId);
           days++; mins += Store.stCalc(st).work;
           what = st.name;
-          td = el('td', { class: 'cell-shift', text: st.short || st.name, style: 'background:' + st.color + '4d;color:inherit' });
+          td = el('td', { class: 'cell-shift on', text: st.short || st.name, style: 'background:' + st.color + ';box-shadow:inset 0 0 0 1px ' + st.color });
         } else {
           var req = Store.requestOf(e.id, d);
           what = req ? REQ_NAME[req] : '休み';
-          td = el('td', { class: 'cell-shift empty ' + (REQ_CLASS[req] || ''), text: req ? REQ_LABEL[req] : '・' });
+          td = el('td', { class: 'cell-shift empty ' + (REQ_CLASS[req] || ''), text: req ? REQ_LABEL[req] : '' });
         }
         return makeActivatable(td, e.name + ' ' + d.slice(5) + ' ' + what + '（押すと変更できます）',
           function () { openCell(e, d); });
@@ -1281,7 +1244,7 @@
 
     /* 日別の人数。足りない枠は押すと理由が見られる */
     var needRows = D.shiftTypes.map(function (st) {
-      return el('tr', {}, [el('td', { class: 'namecol', text: st.name + ' の人数' })].concat(dates.map(function (d) {
+      return el('tr', { class: 'sumrow' }, [el('td', { class: 'namecol', text: st.name + ' の人数' })].concat(dates.map(function (d) {
         var need = Store.needOf(d, st.id), got = Store.assignedOf(d, st.id).length;
         if (need === 0 && got === 0) return el('td', { class: 'cell-shift empty', text: '' });
         var okc = got >= need;
@@ -1778,8 +1741,6 @@
 
     var rows = D.employees.map(function (e) {
       var s = st[e.id];
-      var ytd = (e.ytdEarnings || 0) + s.pay;
-      var capCls = e.incomeCap > 0 ? (ytd > e.incomeCap ? 'ng' : ytd > e.incomeCap * 0.9 ? 'warn' : 'ok') : '';
       return el('tr', {}, [
         el('td', { text: e.name }),
         el('td', { class: 'right', text: s.days + ' 日' + (e.minDays > s.days ? '（不足' + (e.minDays - s.days) + '）' : '') }),
@@ -1788,8 +1749,7 @@
         el('td', { class: 'right', text: s.weekends + ' 回' }),
         el('td', { class: 'right', text: s.nightHours + ' h' }),
         el('td', { class: 'right', text: (s.otHours || 0) + ' h' }),
-        el('td', { class: 'right', text: U.yen(s.pay) }),
-        el('td', { class: 'right' }, [e.incomeCap > 0 ? el('span', { class: 'badge ' + capCls, text: U.yen(ytd) + ' / ' + U.yen(e.incomeCap) }) : el('span', { class: 'muted', text: '—' })])
+        el('td', { class: 'right', text: U.yen(s.pay) })
       ]);
     });
 
@@ -1800,7 +1760,7 @@
         stat('概算人件費', U.yen(rv.totalPay))
       ]),
       el('div', { class: 'scroll', style: 'margin-top:12px' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['氏名', '出勤日数', '労働時間', '夜勤', '土日祝', '深夜時間', '時間外', '賃金(概算)', '年収の壁'].map(function (h) { return el('th', { text: h }); }))]),
+        el('thead', {}, [el('tr', {}, ['氏名', '出勤日数', '労働時間', '夜勤', '土日祝', '深夜時間', '時間外', '賃金(概算)'].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
       ])])
     ]));
@@ -1824,7 +1784,7 @@
     var p = document.getElementById('panel-setup');
     // 法令ルールは常に有効で変更できない。設定として並べても押せないので出さない。
     // 設定する場所をなくしたルールは、調整欄にも出さない
-    var HIDDEN = { 'OPS-110': 1, 'OPS-003': 1, 'OPS-004': 1, 'OPS-A03': 1, 'OPS-A04': 1 };
+    var HIDDEN = { 'OPS-110': 1, 'OPS-003': 1, 'OPS-004': 1, 'OPS-A03': 1, 'OPS-A04': 1, 'OPS-042': 1 };
     var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock && !HIDDEN[d.id]; });
 
 
@@ -1885,7 +1845,7 @@
     var y = now.getFullYear(), m = now.getMonth() + 2;      // 既定は翌月
     if (m > 12) { m = 1; y++; }
     inputDraft = saved && saved.avail ? saved
-      : { name: '', year: y, month: m, wage: '', incomeCap: 0, ytdEarnings: '', avail: {}, requests: {} };
+      : { name: '', year: y, month: m, avail: {}, requests: {} };
     return inputDraft;
   }
   function saveDraft() {
@@ -1904,7 +1864,7 @@
     var filled = dates.filter(function (d) { return dr.avail[d]; }).length;
 
     /* 名前と対象月 */
-    p.appendChild(card('シフト希望の入力', '名前を入れて、カレンダーの日を押して答えてください。終わったら、いちばん下の［LINEなどで送る］を押します。', [
+    p.appendChild(card('シフト希望の入力', '名前を入れて、カレンダーの日を押して答えてください。', [
       el('div', { class: 'row' }, [
         el('div', { class: 'field grow' }, [el('label', { text: 'あなたの名前' }),
         input('text', dr.name, function (e) { dr.name = e.target.value; saveDraft(); }, { placeholder: '例）山田 太郎' })]),
@@ -1912,21 +1872,6 @@
         field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (mm) { return { v: mm, t: mm + '月' }; }), dr.month,
           function (e) { dr.month = +e.target.value; saveDraft(); render(); }))
       ]),
-      el('div', { class: 'row', style: 'margin-top:12px' }, [
-        field('あなたの時給', liveInput('number', dr.wage === undefined ? '' : dr.wage,
-          function (v) { dr.wage = U.num(v, 0, 100000, 0); }, { step: 10, min: 0, placeholder: '例）1100' })),
-        field('扶養の範囲で働きたい', select([
-          { v: '', t: 'いいえ／わからない' },
-          { v: '1030000', t: 'はい（103万円まで）' },
-          { v: '1230000', t: 'はい（123万円まで）' },
-          { v: '1300000', t: 'はい（130万円まで）' },
-          { v: '1500000', t: 'はい（150万円まで）' }
-        ], String(dr.incomeCap || ''), function (e) { dr.incomeCap = +e.target.value || 0; saveDraft(); render(); }))
-      ]),
-      dr.incomeCap > 0 ? el('div', { class: 'row', style: 'margin-top:8px' }, [
-        field('今年すでに稼いだ金額', liveInput('number', dr.ytdEarnings === undefined ? '' : dr.ytdEarnings,
-          function (v) { dr.ytdEarnings = U.num(v, 0, 1e9, 0); }, { step: 10000, min: 0, placeholder: '例）620000' }))
-      ]) : null,
       el('div', { class: 'row', style: 'margin-top:12px' }, [
         el('button', {
           class: 'btn ghost sm', text: '全部「終日OK」', onclick: function () {
@@ -1961,13 +1906,11 @@
       after: function () { saveDraft(); render(); }
     }));
 
-    p.appendChild(card('できたら責任者に送る', '入力した内容は残るので、途中で閉じても続きからできます。', [
-      el('div', { class: 'row' }, [
-        iconBtn('share', 'LINEなどで送る', { class: 'btn big', onclick: shareInputCode }),
-        iconBtn('copy', 'コードをコピー', { class: 'btn ghost', onclick: copyInputCode }),
-        iconBtn('download', 'ファイルに保存', { class: 'btn ghost', onclick: saveInputFile })
-      ]),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: '責任者は、送られた文をそのまま貼り付けるだけで取り込めます。' })
+    p.appendChild(el('div', { class: 'card' }, [
+      el('div', { class: 'row send-row' }, [
+        iconOnly('share', '責任者に送る', { class: 'btn icon-only big-icon', onclick: shareInputCode }),
+        iconOnly('copy', 'コードをコピーする', { class: 'btn ghost icon-only big-icon', onclick: copyInputCode })
+      ])
     ]));
   }
 
@@ -1977,18 +1920,8 @@
     return {
       t: 'shift-submission', v: 1, name: dr.name.trim(), id: '',
       ym: dr.year + '-' + U.pad(dr.month),
-      wage: U.num(dr.wage, 0, 100000, 0),
-      incomeCap: U.num(dr.incomeCap, 0, 1e9, 0),
-      ytdEarnings: U.num(dr.ytdEarnings, 0, 1e9, 0),
       avail: dr.avail, requests: dr.requests
     };
-  }
-
-  function saveInputFile() {
-    var obj = inputPayload(); if (!obj) return;
-    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    U.download(blob, 'シフト希望_' + obj.name + '_' + obj.ym + '.json');
-    toast('保存しました。責任者に送ってください');
   }
 
   /** LINE などにそのまま流せる文面にする（名前＋コード） */
@@ -2108,20 +2041,6 @@
   });
   var menuBtn = document.getElementById('btnMenu');
   if (menuBtn) menuBtn.addEventListener('click', openMenu);
-  document.getElementById('fileImport').addEventListener('change', function (e) {
-    var f = e.target.files[0]; if (!f) return;
-    var r = new FileReader();
-    r.onload = function () {
-      try { Store.importJson(r.result); D = Store.get(); render(); toast('読み込みました'); }
-      catch (err) { alert('読み込めませんでした：' + err.message); }
-    };
-    r.readAsText(f);
-    e.target.value = '';
-  });
-  document.getElementById('fileRequests').addEventListener('change', function (e) {
-    importRequestFiles(e.target.files);
-    e.target.value = '';
-  });
 
   render();
 })();

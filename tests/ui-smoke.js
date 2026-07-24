@@ -142,17 +142,15 @@ function btnText(n) {
   return (self + kids).trim();
 }
 function findButton(panel, text) {
-  return panel.all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf(text) >= 0);
+  return panel.all().find(n => n.tagName === 'BUTTON'
+    && (btnText(n).indexOf(text) >= 0 || String(n.attrs['aria-label'] || '').indexOf(text) >= 0));
 }
 
-/** 「希望を取り込む」→「送られてきた文を貼り付ける」を開く */
+/** 「希望を取り込む」を開く（貼り付けだけ。ファイル経由は廃止） */
 function openImportPaste() {
   const outer = findButton(byId['panel-request'], '希望を取り込む');
   if (!outer) throw new Error('［希望を取り込む］がない');
   outer.click();
-  const paste = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('貼り付ける') >= 0);
-  if (!paste) throw new Error('貼り付ける選択肢がない');
-  paste.click();
 }
 
 tryRun('［シフトを自動作成］を押す', () => {
@@ -253,8 +251,11 @@ tryRun('CSV出力（配る・保存の中）', () => {
 tryRun('メニューが開く', () => {
   byId['btnMenu'].click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
-  ['はじめての方へ', 'スタッフへの渡し方', 'このアプリの決まり', '書き出し', '読み込み', 'サンプルの店を読み込む', '全部消して最初から']
+  ['はじめての方へ', 'スタッフへの渡し方', 'このアプリの決まり', 'この月のシフトを消す', '全部消して最初から']
     .forEach(t => { if (txt.indexOf(t) < 0) throw new Error('メニューに「' + t + '」がない'); });
+  // 実運用では使わないものは出さない
+  ['サンプル', 'バックアップ', 'ファイル']
+    .forEach(t => { if (txt.indexOf(t) >= 0) throw new Error('メニューに「' + t + '」が残っている'); });
 });
 
 tryRun('メニューから使い方が開ける', () => {
@@ -296,7 +297,8 @@ tryRun('［シフト希望を出す］でスタッフの入力画面になる', 
   if (!panel.children.length) throw new Error('入力画面が描画されない');
   const txt = panel.all().map(n => n._text || '').join(' ');
   if (txt.indexOf('シフト希望の入力') < 0) throw new Error('入力画面の見出しがない');
-  if (txt.indexOf('ファイルに保存') < 0) throw new Error('保存ボタンがない');
+  const send = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && String(n.attrs['aria-label'] || '').indexOf('送る') >= 0);
+  if (!send) throw new Error('送るボタンがない');
 });
 
 tryRun('スタッフ画面では責任者用のタブが出ない', () => {
@@ -325,7 +327,7 @@ tryRun('スタッフが入力 → コード化 → 責任者が取り込む', ()
   nameInput.fire('input', { target: nameInput });
   const allOk = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('全部「終日OK」') >= 0);
   allOk.click();
-  const codeBtn = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードをコピー') >= 0);
+  const codeBtn = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && String(n.attrs['aria-label'] || '').indexOf('コードをコピー') >= 0);
   codeBtn.click();
   const ta = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
   if (!ta) throw new Error('コード欄がない。alert=' + JSON.stringify(alerted.slice(-2)));
@@ -362,7 +364,7 @@ tryRun('知らない名前のときは、誰の希望か確認してから取り
   nameInput.value = 'まだ登録していない人';
   nameInput.fire('input', { target: nameInput });
   panel.all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('全部「終日OK」') >= 0).click();
-  byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードをコピー') >= 0).click();
+  byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && String(n.attrs['aria-label'] || '').indexOf('コードをコピー') >= 0).click();
   const code = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA').value;
 
   const draft = JSON.parse(store['shift-input-draft'] || '{}');
@@ -379,29 +381,28 @@ tryRun('知らない名前のときは、誰の希望か確認してから取り
   if (!sel) throw new Error('知らない名前なのに確認のプルダウンが出ない');
 });
 
-tryRun('時給と扶養の設定は、本人の希望と一緒に届く', () => {
+tryRun('店長にもスタッフにも、時給と扶養の設定は出さない', () => {
   sandbox.Store.loadDemo();
-  const emp = sandbox.Store.get().employees[0];
-  const obj = {
-    t: 'shift-submission', v: 1, name: emp.name, id: '',
-    ym: sandbox.Store.get().settings.year + '-' + String(sandbox.Store.get().settings.month).padStart(2, '0'),
-    wage: 1234, incomeCap: 1030000, ytdEarnings: 456000, avail: {}, requests: {}
-  };
-  sandbox.Store.importSubmission(obj, emp.id);
-  const after = sandbox.Store.empById(emp.id);
-  if (after.wage !== 1234) throw new Error('時給が反映されない: ' + after.wage);
-  if (after.incomeCap !== 1030000) throw new Error('年収上限が反映されない: ' + after.incomeCap);
-  if (after.ytdEarnings !== 456000) throw new Error('累計賃金が反映されない: ' + after.ytdEarnings);
-
-  // 店長の編集画面には出さない
   openTab('staff');
   findButton(byId['panel-staff'], '編集').click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
-  ['時給', '年収上限', '責任者', '有資格者', '教育担当']
+  ['時給', '年収上限', '年収の壁', '責任者', '有資格者', '教育担当']
     .forEach(t => { if (txt.indexOf(t) >= 0) throw new Error('店長側に「' + t + '」が残っている'); });
   ['新人', '18歳未満', '優先度'].forEach(t => {
     if (txt.indexOf(t) < 0) throw new Error('「' + t + '」が見つからない');
   });
+  byId['modalClose'].click();
+
+  setMode('input');
+  const staff = byId['panel-input'].all().map(n => n._text || '').join(' ');
+  ['時給', '扶養', '年収', 'ファイルに保存'].forEach(t => {
+    if (staff.indexOf(t) >= 0) throw new Error('スタッフ側に「' + t + '」が残っている');
+  });
+  setMode('manage');
+
+  openTab('summary');
+  const sum = byId['panel-summary'].all().map(n => n._text || '').join(' ');
+  if (sum.indexOf('年収の壁') >= 0) throw new Error('集計に年収の壁が残っている');
 });
 
 tryRun('モードは保存され、開き直しても続く', () => {

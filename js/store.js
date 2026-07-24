@@ -46,10 +46,10 @@ var Store = (function () {
     var e2 = emp({ id: 'e2', name: '佐藤', wage: 1400, employment: 'full', leader: true, trainer: true, minDays: 16, maxDays: 21 });
     var e3 = emp({ id: 'e3', name: '鈴木', wage: 1250, leader: true, certified: true, trainer: true, minDays: 14, maxDays: 21 });
     var e4 = emp({ id: 'e4', name: '高橋', wage: 1150, certified: true, minDays: 14, maxDays: 21, priority: 1 });
-    var e5 = emp({ id: 'e5', name: '伊藤(扶養内)', wage: 1150, minDays: 6, maxDays: 12, incomeCap: 1230000, ytdEarnings: 620000, canShift: ['A', 'B'] });
+    var e5 = emp({ id: 'e5', name: '伊藤', wage: 1150, minDays: 6, maxDays: 12, canShift: ['A', 'B'] });
     var e6 = emp({ id: 'e6', name: '渡辺(学生)', wage: 1100, employment: 'student', minDays: 6, maxDays: 16, canShift: ['A', 'B'], ngWeekdays: [1, 2] });
     var e7 = emp({ id: 'e7', name: '山本(新人)', wage: 1100, newbie: true, minDays: 8, maxDays: 16, canShift: ['A', 'B'], trainerId: 'e3' });
-    var e8 = emp({ id: 'e8', name: '中村(高校生)', wage: 1080, employment: 'student', minor: true, minDays: 4, maxDays: 10, canShift: ['A'], priority: -1 });
+    var e8 = emp({ id: 'e8', name: '中村(高校生)', wage: 1080, employment: 'student', minor: true, minDays: 4, maxDays: 10, canShift: ['A'] });
     var e9 = emp({ id: 'e9', name: '小林', wage: 1200, leader: true, trainer: true, minDays: 14, maxDays: 20 });
     var e10 = emp({ id: 'e10', name: '加藤', wage: 1150, certified: true, trainer: true, minDays: 12, maxDays: 20 });
 
@@ -61,9 +61,10 @@ var Store = (function () {
       B: [2, 1, 1, 1, 1, 1, 2],
       N: [1, 1, 1, 1, 1, 1, 1]
     };
+    // 役割の必須指定は画面から外したので、初期データでも使わない
     var roleReq = {
-      A: { leader: true, certified: false },
-      B: { leader: false, certified: true },
+      A: { leader: false, certified: false },
+      B: { leader: false, certified: false },
       N: { leader: false, certified: false }
     };
 
@@ -351,7 +352,6 @@ var Store = (function () {
     return {
       t: 'shift-submission', v: 1, name: e.name, id: empId,
       ym: d.settings.year + '-' + U.pad(d.settings.month),
-      wage: e.wage || 0, incomeCap: e.incomeCap || 0, ytdEarnings: e.ytdEarnings || 0,
       avail: d.avail[empId] || {}, requests: d.requests[empId] || {}
     };
   }
@@ -396,10 +396,6 @@ var Store = (function () {
     if (obj.ym && obj.ym !== ym) throw new Error('対象月が違います（提出コードは ' + obj.ym + '）');
     d.avail[e.id] = obj.avail || {};
     d.requests[e.id] = obj.requests || {};
-    // 時給と扶養の設定は本人が出す（店長側では入力しない）
-    if (obj.wage > 0) e.wage = +obj.wage;
-    if (obj.incomeCap !== undefined) e.incomeCap = +obj.incomeCap || 0;
-    if (obj.ytdEarnings !== undefined) e.ytdEarnings = +obj.ytdEarnings || 0;
     d.submissions[e.id] = { status: 'submitted', at: '取込' };
     save();
     return e;

@@ -128,12 +128,30 @@ h1,h2,h3,h4,.card > h2{text-wrap:balance}
 
 /* ---------- 手順の選択（ヘッダーの中） ---------- */
 .tabs{flex:1;min-width:0;display:flex}
+/* OS任せにすると端末によって文字色が地に沈むので、見た目は自前で描く */
 .step-select{
-  flex:1;min-width:0;min-height:44px;padding:8px 12px;
-  border:1px solid var(--line-2);border-radius:var(--r-md);background:var(--panel);
-  font-weight:700;font-size:15px;color:var(--accent-ink);cursor:pointer;
+  appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  flex:1;min-width:0;min-height:44px;
+  padding:8px 40px 8px 14px;
+  border:1px solid var(--line-2);border-radius:var(--r-md);
+  background-color:var(--panel);
+  background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2336382f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+  background-size:18px 18px;
+  font-weight:700;font-size:15px;line-height:1.4;
+  color:var(--text);
+  cursor:pointer;
+  text-overflow:ellipsis;
 }
+.step-select option{color:#36382f;background:#ffffff}
 .step-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+@media (prefers-color-scheme: dark){
+  .step-select{
+    background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ece7e0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+  .step-select option{color:#ece7e0;background:#2a2724}
+}
 
 /* 読み上げにだけ残す（画面には出さない） */
 .sr-only{
@@ -258,10 +276,24 @@ tbody tr:hover td{background:var(--panel-2)}
 .badge.warn{background:var(--warn-soft);color:var(--warn)}
 .badge.ng{background:var(--ng-soft);color:var(--ng)}
 
-/* ---------- シフト表のセル ---------- */
+/* ---------- シフト表 ---------- */
+/* 1行ずつ地色を変えて、横に目で追えるようにする */
+.scroll tbody tr:nth-child(odd) td{background:var(--panel-2)}
+.scroll tbody tr:nth-child(odd) td.namecol{background:var(--panel-2)}
+/* 氏名の列と本体を区切る */
+.scroll td.namecol,.scroll th.namecol{border-right:2px solid var(--line-2)}
+/* 集計（人数）の行は本体と分ける */
+.scroll tr.sumrow td{border-top:2px solid var(--line-2);color:var(--muted);font-size:12px}
+.scroll tr.sumrow td.namecol{font-weight:600}
+
 .cell-shift{
   cursor:pointer;text-align:center;font-weight:600;font-size:12px;
   padding:4px;min-width:44px;border-radius:6px;transition:box-shadow var(--ease);
+}
+/* 勤務が入っているマスは、はっきり塗る（薄いと早番と遅番が見分けられない） */
+.cell-shift.on{
+  color:#2b2a26;font-weight:700;font-size:13px;
+  background-clip:padding-box;border:2px solid transparent;
 }
 .cell-shift:hover{box-shadow:inset 0 0 0 2px var(--accent)}
 /* キーボードでもどのセルにいるか分かるようにする */
@@ -269,7 +301,7 @@ tbody tr:hover td{background:var(--panel-2)}
   outline:none;box-shadow:inset 0 0 0 3px var(--accent);border-radius:6px;
 }
 .cell-shift.empty{color:var(--line-2);font-weight:400}
-td.sat{background:rgba(85,115,181,.06)} td.sun{background:rgba(168,79,72,.06)}
+td.sat{background:rgba(85,115,181,.10)} td.sun{background:rgba(168,79,72,.10)}
 th.sat{color:var(--accent-ink)} th.sun{color:var(--ng)}
 
 /* ---------- 警告 ---------- */
@@ -524,3 +556,8 @@ details.rule[open] summary::before{content:'▾ '}
 
 /* ダイアログが開いているときは、お知らせがボタンに重ならないよう上に出す */
 .modal:not(.hidden) ~ .toast{bottom:auto;top:24px}
+
+/* アイコンだけのボタン。名前は aria-label と長押しのヒントで伝える */
+.btn.icon-only{min-width:44px;padding:0 12px}
+.btn.icon-only.big-icon{min-height:56px;min-width:72px;flex:1 1 auto}
+.send-row{gap:12px}
