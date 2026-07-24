@@ -383,7 +383,7 @@
         el('div', { class: 'vd', text: '入れていいか分からない人を勝手に入れないためです。全く入力のない人はシフトに入りません。' })
       ]),
       el('div', { class: 'violation' }, [
-        el('div', { class: 'vt', text: '必要人数を超える人は入れません' }),
+        el('div', { class: 'vt', text: '必要人数を超えて配置しません' }),
         el('div', { class: 'vd', text: '人件費が無駄に増えるのを防ぎます。' })
       ]),
       el('div', { class: 'violation' }, [
@@ -632,7 +632,7 @@
       field('月の最低時間（0＝なし）', input('number', e.minHoursMonth, function (ev) { e.minHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の上限時間（0＝なし）', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の夜勤上限（0＝なし）', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
-      field('週に入れる回数の上限（0＝なし）', input('number', e.weeklyDaysCap, function (ev) { e.weeklyDaysCap = U.num(ev.target.value, 0, 7, 0); }, { min: 0, max: 7 })),
+      field('週の出勤回数の上限（0＝なし）', input('number', e.weeklyDaysCap, function (ev) { e.weeklyDaysCap = U.num(ev.target.value, 0, 7, 0); }, { min: 0, max: 7 })),
       field('週の上限時間（0＝なし）', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
       field('優先度', select([
         { v: '', t: '未入力' }, { v: 0, t: '0（ふつう）' }, { v: 1, t: '1（優先する）' }
@@ -640,7 +640,7 @@
         function (ev) { e.priority = ev.target.value === '' ? '' : +ev.target.value; }))
     ]));
     b.appendChild(el('p', { class: 'hint', text:
-      '優先度は、希望が重なったときに誰を先に入れるかの目安です。1にした人が先に入ります。' }));
+      '優先度は、希望が重なったときに誰を先に組むかの目安です。1にした人が先に入ります。' }));
 
     var others = D.employees.filter(function (x) { return x.id !== e.id; });
 
@@ -1468,7 +1468,7 @@
         class: 'btn ' + (cur === st.id ? '' : 'ghost'),
         text: st.name + (ngs.length ? '（NG）' : ''),
         onclick: function () {
-          if (ngs.length && !confirm('この割当は次のルールに反します：\n' + ngs.map(function (n) { return '・' + n.msg; }).join('\n') + '\nそれでも入れますか？')) return;
+          if (ngs.length && !confirm('この割当は次のルールに反します：\n' + ngs.map(function (n) { return '・' + n.msg; }).join('\n') + '\nそれでも組みますか？')) return;
           setCell(e.id, date, st.id); closeModal();
         }
       });
@@ -1485,7 +1485,7 @@
       ngs.forEach(function (n) { ngList.push(st.name + '：' + n.msg); });
     });
     if (ngList.length) {
-      b.appendChild(el('h4', { text: '入れられない理由' }));
+      b.appendChild(el('h4', { text: '組めない理由' }));
       ngList.forEach(function (t) { b.appendChild(el('div', { class: 'vd', text: '・' + t })); });
     }
 
@@ -1500,7 +1500,7 @@
         b.appendChild(el('div', { class: 'vd', style: 'margin-top:6px', text: '次点：' + tr.alternatives.map(function (a) { return a.name + '(' + a.score + ')'; }).join('、') }));
       }
       if (tr.blocked && tr.blocked.length) {
-        b.appendChild(el('h4', { text: '他の人が入れなかった理由', style: 'margin-top:10px' }));
+        b.appendChild(el('h4', { text: '他の人を組めなかった理由', style: 'margin-top:10px' }));
         tr.blocked.slice(0, 6).forEach(function (x) {
           b.appendChild(el('div', { class: 'vd', text: '・' + x.name + '：' + x.reason }));
         });
@@ -1573,12 +1573,12 @@
         return el('span', { class: 'chip', text: e.name });
       })) : null,
       group('休みの希望を出している人', wantOff, '',
-        '休みたいと出した日には入れません。どうしても必要なときは本人に確認してください。'),
+        '休みたいと出した日には出勤させません。どうしても必要なときは本人に確認してください。'),
       group('まだ希望を出していない人', noAnswer, 'hard',
         '希望が未入力の日は出勤させません。ここが埋まると人が足りることがあります。'),
       group('本人が「行けない」と答えた人', cantGo, ''),
       group('同じ日に別の勤務が入っている人', already, ''),
-      group('その他の理由で入れない人', other, '')
+      group('その他の理由で組めない人', other, '')
     ]);
 
     var foot = [];
@@ -1616,7 +1616,7 @@
     b.appendChild(el('p', { class: 'hint', text: head + '　' + emp.name + 'さんの代わりを探します。' }));
 
     /* ① すぐ入れる */
-    b.appendChild(el('h4', { text: 'そのまま入れる人（' + o.ready.length + '名）' }));
+    b.appendChild(el('h4', { text: 'そのまま組める人（' + o.ready.length + '名）' }));
     if (o.ready.length) {
       b.appendChild(el('div', { class: 'row', style: 'margin-bottom:4px' },
         o.ready.slice(0, 8).map(function (c) { return pickBtn(c.empId, c.name); })));
@@ -1625,13 +1625,13 @@
         if (r) b.appendChild(el('div', { class: 'vd', text: '・' + c.name + '：' + r }));
       });
     } else {
-      b.appendChild(el('p', { class: 'vd', text: 'ルールを守ったまま入れる人はいません。下の候補から選んでください。' }));
+      b.appendChild(el('p', { class: 'vd', text: 'ルールを守ったまま組める人はいません。下の候補から選んでください。' }));
     }
 
     /* ② 本人に確認すれば入れる */
     if (o.askPerson.length) {
-      b.appendChild(el('h4', { text: '本人に聞けば入れるかもしれない人（' + o.askPerson.length + '名）' }));
-      b.appendChild(el('p', { class: 'vd', text: '本人の都合の問題だけです。電話して都合がつけば入れられます。' }));
+      b.appendChild(el('h4', { text: '本人に聞けば組めるかもしれない人（' + o.askPerson.length + '名）' }));
+      b.appendChild(el('p', { class: 'vd', text: '本人の都合の問題だけです。電話して都合がつけば組めます。' }));
       o.askPerson.forEach(function (c) {
         b.appendChild(el('div', { class: 'violation', style: 'margin-bottom:6px' }, [
           el('div', { class: 'vt', text: c.name }),
@@ -1645,7 +1645,7 @@
 
     /* ③ 無理をさせれば入れる */
     if (o.stretch.length) {
-      b.appendChild(el('h4', { text: '無理をさせれば入れる人（' + o.stretch.length + '名）' }));
+      b.appendChild(el('h4', { text: '無理をさせれば組める人（' + o.stretch.length + '名）' }));
       b.appendChild(el('p', { class: 'vd', text: '法令には触れませんが、店のルールを破ることになります。' }));
       o.stretch.slice(0, 6).forEach(function (c) {
         var msgs = c.breaks.map(function (x) { return x.msg; });
@@ -1654,7 +1654,7 @@
         ].concat(msgs.map(function (m) { return el('div', { class: 'vd', text: '・' + m }); }))
           .concat([el('div', { style: 'margin-top:6px' }, [
             pickBtn(c.empId, c.name, 'ghost sm', c.name + 'さんを入れると次のようになります。\n\n'
-              + msgs.map(function (m) { return '・' + m; }).join('\n') + '\n\nそれでも入れますか？')
+              + msgs.map(function (m) { return '・' + m; }).join('\n') + '\n\nそれでも組みますか？')
           ])])));
       });
     }
@@ -1662,7 +1662,7 @@
     /* ④ 入れられない */
     if (o.blocked.length) {
       var det = el('details', { class: 'rule', style: 'margin-top:12px' }, [
-        el('summary', { text: '入れられない人（' + o.blocked.length + '名）' })
+        el('summary', { text: '組めない人（' + o.blocked.length + '名）' })
       ]);
       o.blocked.forEach(function (c) {
         det.appendChild(el('div', { class: 'vd', text: (c.isLaw ? '【法令】' : '') + c.name + '：' + c.reason }));

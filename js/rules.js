@@ -10,11 +10,11 @@ var Rules = (function () {
   var DEFS = [
     // ---- 法令（ハード固定・無効化不可） ----
     { id: 'LAW-001', cat: 'law', name: '1日8時間・週40時間', type: 'hard', lock: true, params: { daily: 480, weekly: 2400 }, ref: '労働基準法 第32条（法定労働時間）', desc: '1日8時間・週40時間を超えないようにします。' },
-    { id: 'LAW-005', cat: 'law', name: '36協定なしの時間外禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第36条（時間外・休日労働の協定）', desc: '36協定を結んでいない前提で、法定時間を超える勤務は入れません。' },
+    { id: 'LAW-005', cat: 'law', name: '36協定なしの時間外禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第36条（時間外・休日労働の協定）', desc: '36協定を結んでいない前提で、法定時間を超える勤務は割り当てません。' },
     { id: 'LAW-006', cat: 'law', name: '時間外労働の上限（月45時間）', type: 'hard', lock: true, params: { monthlyOt: 2700 }, ref: '労働基準法 第36条第4項（時間外労働の上限）', desc: '36協定があっても時間外労働は原則 月45時間・年360時間まで。' },
     { id: 'LAW-020', cat: 'law', name: '休憩時間', type: 'hard', lock: true, params: {}, ref: '労働基準法 第34条（休憩）', desc: '6時間を超える勤務は45分以上、8時間を超える勤務は60分以上の休憩があるか確認します。' },
     { id: 'LAW-024', cat: 'law', name: '週1日以上の休日', type: 'hard', lock: true, params: { maxRun: 6 }, ref: '労働基準法 第35条（休日）', desc: '連続勤務は6日までにして、週に1日は必ず休みを入れます。' },
-    { id: 'LAW-040', cat: 'law', name: '18歳未満の深夜勤務禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第61条（深夜業の制限）', desc: '22時から翌5時にかかる勤務には入れません。' },
+    { id: 'LAW-040', cat: 'law', name: '18歳未満の深夜勤務禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第61条（深夜業の制限）', desc: '22時から翌5時にかかる勤務には割り当てません。' },
     { id: 'LAW-041', cat: 'law', name: '18歳未満の時間外禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第60条（年少者の労働時間）', desc: '1日8時間・週40時間を厳守（36協定があっても超過不可）。' },
     { id: 'LAW-060', cat: 'law', name: '有給・確定休の尊重', type: 'hard', lock: true, params: {}, ref: '労働基準法 第39条（年次有給休暇）', desc: '有給を使う日と、絶対に休みたい日には出勤させません。' },
 
@@ -24,12 +24,12 @@ var Rules = (function () {
     { id: 'OPS-003', cat: 'ops', name: '責任者の配置', type: 'hard', params: {}, desc: '責任者必須の勤務区分に責任者を1名以上。' },
     { id: 'OPS-004', cat: 'ops', name: '有資格者の配置', type: 'hard', params: {}, desc: '有資格者必須の勤務区分に有資格者を1名以上。' },
     { id: 'OPS-006', cat: 'ops', name: '新人だけの勤務にしない', type: 'hard', params: {}, desc: '新人には、新人でない人を同じ勤務に必ず一緒に入れます。' },
-    { id: 'OPS-008', cat: 'ops', name: '担当できる勤務だけに入れる', type: 'hard', params: {}, desc: '本人ができない勤務区分には入れない。' },
+    { id: 'OPS-008', cat: 'ops', name: '担当できる勤務だけに割り当てる', type: 'hard', params: {}, desc: '本人が担当できない勤務には割り当てません。' },
     { id: 'OPS-A06', cat: 'ops', name: '同じ日に2つの勤務を入れない', type: 'hard', params: {}, desc: '1人が同じ日に複数の勤務区分へ重複して入らないようにする。' },
     { id: 'OPS-027', cat: 'ops', name: '勤務と勤務の間をあける', type: 'hard', weight: 0, params: { hours: 11 }, desc: '終業から次の始業まで一定時間を空ける。' },
     { id: 'OPS-030', cat: 'ops', name: '休みの希望をかなえる', type: 'hard', lock: true, params: {}, desc: '休みたいと出した日には出勤させません。' },
     { id: 'OPS-031', cat: 'ops', name: '出たい日の希望をかなえる', type: 'soft', weight: 3000, params: {}, desc: '「出たい」と申告した日を優先的に割り当てる。' },
-    { id: 'OPS-032', cat: 'ops', name: '勤務不可の曜日', type: 'hard', params: {}, desc: '通学や掛け持ちの仕事などで出られない曜日には入れません。' },
+    { id: 'OPS-032', cat: 'ops', name: '勤務不可の曜日', type: 'hard', params: {}, desc: '通学や掛け持ちの仕事などで出られない曜日には割り当てません。' },
     { id: 'OPS-033', cat: 'ops', name: '本人が出せる時間内におさめる', type: 'hard', params: {}, desc: '本人が出せると答えた時間の中だけで割り当てます。' },
     { id: 'OPS-034', cat: 'ops', name: '最低出勤日数・最低勤務時間', type: 'soft', weight: 500, params: {}, desc: '契約で約束した最低の日数・時間に届くよう、優先して入れます。届かないときは不足としてお知らせします。' },
     { id: 'OPS-035', cat: 'ops', name: '最大出勤日数・上限時間', type: 'hard', params: {}, desc: '本人ごとの上限日数・上限時間を超えない。' },
@@ -49,7 +49,7 @@ var Rules = (function () {
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者を使いすぎない', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
     { id: 'OPS-A05', cat: 'ops', name: '月のはじめと終わりで偏らせない', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' },
     { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の勤務時間の上限を決められます。' },
-    { id: 'OPS-A08', cat: 'ops', name: '週の出勤回数の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間に何回まで入れるかを決められます。' }
+    { id: 'OPS-A08', cat: 'ops', name: '週の出勤回数の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の出勤回数の上限を決められます。' }
   ];
 
   var DEF_MAP = {};

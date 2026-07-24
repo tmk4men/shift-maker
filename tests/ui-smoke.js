@@ -181,7 +181,7 @@ tryRun('欠員対応ダイアログが開く', () => {
   if (!b) throw new Error('「代わりを探す」ボタンがない');
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
-  if (txt.indexOf('そのまま入れる人') < 0) throw new Error('候補一覧が出ない');
+  if (txt.indexOf('そのまま組める人') < 0) throw new Error('候補一覧が出ない');
   const foot = byId['modalFoot'].children.map(n => n._text || '').join(' ');
   if (foot.indexOf('人数不足のまま') < 0) throw new Error('「代わりを立てない」選択肢がない');
 });
@@ -675,7 +675,7 @@ tryRun('1週間に入れる回数の上限を守る', () => {
   if (txt.indexOf('週2回') < 0) throw new Error('一覧に週の回数が出ていない');
   findButton(byId['panel-staff'], '編集').click();
   const dlg = byId['modalBody'].all().map(n => n._text || '').join(' ');
-  if (dlg.indexOf('週に入れる回数') < 0) throw new Error('編集画面に週の回数の設定がない');
+  if (dlg.indexOf('週の出勤回数') < 0) throw new Error('編集画面に週の回数の設定がない');
   byId['modalClose'].click();
 });
 
