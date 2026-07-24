@@ -173,6 +173,17 @@ textarea{padding:12px;border:1px solid var(--line-2);border-radius:var(--r-sm);b
 /* ---------- 表（罫線は横だけ＝視線が流れる） ---------- */
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line)}
+
+/* 表の中の入力欄。枠がないと押せると分からず、小さいと指で押せない */
+table input,table select{
+  min-height:40px;max-width:100%;padding:6px 8px;
+  border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--panel);
+}
+table input[type=color]{padding:2px}
+table input:focus,table select:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);
+}
+table .switch{min-height:40px}
 th{
   background:var(--panel-2);font-weight:600;font-size:12px;white-space:nowrap;
   color:var(--muted);letter-spacing:.04em;border-bottom:1px solid var(--line-2);
@@ -349,6 +360,38 @@ details.rule[open] summary::before{content:'▾ '}
 .staff-table td.sat{color:var(--accent-ink);background:none}
 
 /* ===========================================================
+   指で押す端末：表のセルも 44px 以上の的にする
+   =========================================================== */
+@media (pointer: coarse){
+  .cell-shift,.req-cell{padding:12px 4px}
+  .btn.sm{min-height:40px}
+}
+
+/* ===========================================================
+   小さいスマホ（420px 以下）：余白と文字を詰めて、5つのタブを見せる
+   =========================================================== */
+@media (max-width: 420px){
+  main{padding:12px}
+  .card{padding:16px 12px}
+  .app-header{padding:12px}
+  .tabs{gap:4px;padding:8px}
+  .tab{padding:10px 12px;font-size:13px}
+  .modes{padding:12px 12px 0;gap:4px}
+  .mode-t{font-size:14px}
+  .mode-s{font-size:10px}
+  .btn{padding:8px 16px}
+  .stat .v{font-size:19px}
+}
+
+/* ダイアログのボタンは、狭い画面では横幅を分け合って押しやすくする */
+@media (max-width: 480px){
+  .modal{padding:8px}
+  .modal-box{max-height:92vh}
+  .modal-foot{justify-content:stretch}
+  .modal-foot .btn{flex:1 1 132px}
+}
+
+/* ===========================================================
    タブレット・PC（768px 以上）
    =========================================================== */
 @media (min-width: 768px){
@@ -394,7 +437,7 @@ details.rule[open] summary::before{content:'▾ '}
   table{font-size:9px;width:100%}
   th,td{border:1px solid #999;padding:1px 2px;color:#000}
   th{background:#eee !important}
-  .cell-shift{min-width:0;font-size:9px}
+  .cell-shift,.req-cell{min-width:0;font-size:9px;padding:1px 2px}
   .cell-shift,td.sat,td.sun,th.sat,th.sun{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .violation,.grid2,.stat{break-inside:avoid}
 }

@@ -27,7 +27,7 @@ function makeNode(tag) {
       add() { }, remove() { }, toggle() { },
       contains(c) { return false; }
     },
-    click() { (this._listeners.click || []).forEach(f => f({ target: this })); },
+    click() { this._clicked = (this._clicked || 0) + 1; (this._listeners.click || []).forEach(f => f({ target: this })); },
     fire(ev, arg) { (this._listeners[ev] || []).forEach(f => f(arg || { target: this })); },
     /** 子孫を平坦化して集める */
     all() {
@@ -52,7 +52,9 @@ const allPanels = ['input', 'setup', 'staff', 'request', 'shift', 'summary'].map
 const modeButtons = ['input', 'manage'].map(m => {
   const b = makeNode('button'); b.className = 'mode'; b.dataset.mode = m; return b;
 });
+const documentBody = makeNode('body');
 const document = {
+  body: documentBody,
   createElement: makeNode,
   createTextNode: t => ({ nodeType: 3, textContent: String(t) }),
   getElementById: id => byId[id] || makeNode('div'),
@@ -347,6 +349,58 @@ tryRun('スタッフへの渡し方の案内が出る', () => {
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
   if (txt.indexOf('シフト希望を出す') < 0) throw new Error('手順が出ない');
+});
+
+/* ---------- 押しても反応しないように見える不具合 ---------- */
+console.log('\n=== 反応の確認 ===');
+
+tryRun('詳しいルール設定に、変更できない法令ルールを並べない', () => {
+  setMode('manage');
+  openTab('setup');
+  const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('LAW-') >= 0) throw new Error('変更できない法令ルールが設定欄に出ている');
+  if (txt.indexOf('運用ルール') < 0) throw new Error('調整できる運用ルールまで消えている');
+  if (txt.indexOf('OPS-') < 0) throw new Error('運用ルールの中身がない');
+});
+
+tryRun('入力中は画面を作り直さない（打った文字が消えない）', () => {
+  openTab('setup');
+  const yearInput = byId['panel-setup'].all()
+    .find(n => n.tagName === 'INPUT' && n.attrs.type === 'number' && String(n.attrs.min) === '2000');
+  if (!yearInput) throw new Error('年の入力欄がない');
+
+  yearInput.value = '2027';
+  yearInput.fire('input', { target: yearInput });
+  const stillThere = byId['panel-setup'].all().indexOf(yearInput) >= 0;
+  if (!stillThere) throw new Error('1文字打っただけで入力欄が作り直されている');
+  if (sandbox.Store.get().settings.year !== 2027) throw new Error('打った内容が保存されていない');
+
+  // 入力が確定したら作り直す（実働時間などの表示を合わせるため）
+  yearInput.fire('change', { target: yearInput });
+  if (byId['panel-setup'].all().indexOf(yearInput) >= 0) throw new Error('確定しても作り直されない');
+});
+
+tryRun('開いていた説明は、作り直しても開いたまま', () => {
+  openTab('setup');
+  const det = byId['panel-setup'].all().find(n => n.tagName === 'DETAILS' && n.attrs['data-dk'] === 'rules');
+  if (!det) throw new Error('詳しいルール設定に目印がない');
+});
+
+tryRun('ファイル保存は <a> を本文に入れてから押す', () => {
+  documentBody.children = [];
+  openTab('shift');
+  findButton(byId['panel-shift'], 'CSV出力').click();
+  const a = documentBody.children.find(n => n.tagName === 'A' && n.download);
+  if (!a) throw new Error('<a> が本文に入っていない（Firefox などで保存されない）');
+  if (!a._clicked) throw new Error('<a> が押されていない');
+  if (String(a.download).indexOf('.csv') < 0) throw new Error('ファイル名が違う: ' + a.download);
+});
+
+tryRun('使う人の切り替えは、余白を押しても落ちない', () => {
+  const stray = makeNode('div');           // data-mode を持たない要素
+  const before = store['shift-maker-mode'];
+  (byId['modes']._listeners.click || []).forEach(f => f({ target: stray }));
+  if (store['shift-maker-mode'] !== before) throw new Error('余白を押しただけでモードが変わった');
 });
 
 /* ---------- 壊れた保存データからの復帰 ---------- */

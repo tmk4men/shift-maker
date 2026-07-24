@@ -331,11 +331,7 @@ var Store = (function () {
 
   function exportJson() {
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'shift_' + data.settings.year + U.pad(data.settings.month) + '.json';
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    U.download(blob, 'shift_' + data.settings.year + U.pad(data.settings.month) + '.json');
   }
 
   /** 読み込みは一時オブジェクトで完結させてから差し替える（失敗しても現在のデータを壊さない） */

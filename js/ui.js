@@ -4,6 +4,7 @@
   var el = U.el;
   var currentTab = 'setup';
   var staffView = '';     // 提出画面を開いている従業員ID
+  var scrollTo = '';      // 描画のあと、この要素まで画面を動かす（開いた先が画面外だと無反応に見えるため）
   var staffPage = '';     // スタッフ専用モードの表示（shift = 自分のシフト / submit = 希望提出）
 
   /* 使う人のモード（URLではなく画面で切り替える）
@@ -34,6 +35,81 @@
   function saveAndRender() { Store.save(); render(); }
   Store.onSaveError(function (msg) { toast(msg); });
 
+  /* ---------- 作り直しても、見ている場所を保つ ----------
+     画面は操作のたびに丸ごと作り直している。そのままだと開いた説明が閉じ、
+     入力中の欄からカーソルが外れ、スクロールが先頭に戻る。
+     利用者にはこれが「押しても反応しない」に見えるので、前後で状態を写し取って戻す。 */
+  function qsa(sel) {
+    try { return Array.prototype.slice.call(document.querySelectorAll(sel)); } catch (e) { return []; }
+  }
+  /** 作り直しの前後で同じ欄を指すための目印（同じ種類の中で何番目か） */
+  function nodeKey(node) {
+    if (!node || !node.tagName) return '';
+    var same = qsa('.panel ' + node.tagName.toLowerCase());
+    var i = same.indexOf(node);
+    return i < 0 ? '' : node.tagName + '#' + i;
+  }
+  function snapshotUI() {
+    var s = { where: mode + '/' + currentTab, details: {}, scroll: [], focus: '', sel: null, y: 0 };
+    try {
+      s.y = (typeof window !== 'undefined' && window.pageYOffset) || 0;
+      qsa('details[data-dk]').forEach(function (d) { s.details[d.getAttribute('data-dk')] = !!d.open; });
+      qsa('.panel .scroll').forEach(function (n) { s.scroll.push([n.scrollTop || 0, n.scrollLeft || 0]); });
+      var a = document.activeElement;
+      if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName || '')) {
+        s.focus = nodeKey(a);
+        try { s.sel = [a.selectionStart, a.selectionEnd]; } catch (e) { s.sel = null; }
+      }
+    } catch (e) { /* 状態を保てなくても描画は続ける */ }
+    return s;
+  }
+  function restoreUI(s) {
+    if (!s) return;
+    try {
+      // 開いていた説明は、タブが変わっても覚えておく
+      qsa('details[data-dk]').forEach(function (d) {
+        var v = s.details[d.getAttribute('data-dk')];
+        if (v !== undefined) d.open = v;
+      });
+      // 位置とカーソルは、同じ画面を作り直したときだけ戻す
+      if (s.where !== mode + '/' + currentTab) return;
+      var boxes = qsa('.panel .scroll');
+      if (boxes.length === s.scroll.length) boxes.forEach(function (n, i) {
+        n.scrollTop = s.scroll[i][0]; n.scrollLeft = s.scroll[i][1];
+      });
+      if (s.focus) {
+        var parts = s.focus.split('#');
+        var target = qsa('.panel ' + parts[0].toLowerCase())[+parts[1]];
+        if (target && target.focus) {
+          target.focus();
+          if (s.sel && target.setSelectionRange) {
+            try { target.setSelectionRange(s.sel[0], s.sel[1]); } catch (e) { /* 数値欄などは対象外 */ }
+          }
+        }
+      }
+      if (s.y && typeof window !== 'undefined' && window.scrollTo) window.scrollTo(0, s.y);
+    } catch (e) { /* 同上 */ }
+  }
+
+  /** クリップボードは環境によって使えない。使えないときは黙って失敗せず、手で選べる形にする */
+  function copyText(text, node) {
+    function fallback() {
+      var done = false;
+      try {
+        if (node && node.select) { node.focus(); node.select(); }
+        done = !!(document.execCommand && document.execCommand('copy'));
+      } catch (err) { done = false; }
+      toast(done ? 'コピーしました' : 'コピーできませんでした。枠の中を選んでコピーしてください');
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        var pr = navigator.clipboard.writeText(text);
+        if (pr && pr.then) { pr.then(function () { toast('コピーしました'); }, fallback); return; }
+      }
+    } catch (e) { /* 下の手動コピーに任せる */ }
+    fallback();
+  }
+
   function modal(title, bodyNode, footNodes) {
     document.getElementById('modalTitle').textContent = title;
     var body = document.getElementById('modalBody'); body.innerHTML = '';
@@ -48,6 +124,12 @@
   function input(type, value, oninput, attrs) {
     var a = Object.assign({ type: type, value: value === undefined ? '' : value, oninput: oninput }, attrs || {});
     return el('input', a);
+  }
+  /** 打っている間は保存だけ。画面を作り直すのは入力が確定してから。
+      1文字ごとに作り直すと入力欄そのものが消えて、打てない＝反応しないように見えるため。 */
+  function liveInput(type, value, apply, attrs) {
+    var a = Object.assign({ onchange: function () { render(); } }, attrs || {});
+    return input(type, value, function (e) { apply(e.target.value); Store.save(); }, a);
   }
   function checkbox(label, checked, onchange) {
     var c = el('input', { type: 'checkbox', onchange: onchange });
@@ -210,7 +292,7 @@
     p.appendChild(card('店舗・対象月', null, [
       el('div', { class: 'row' }, [
         field('店舗名', input('text', s.storeName, function (e) { s.storeName = e.target.value; Store.save(); })),
-        field('年', input('number', s.year, function (e) { s.year = U.num(e.target.value, 2000, 2100, s.year); saveAndRender(); }, { min: 2000, max: 2100 })),
+        field('年', liveInput('number', s.year, function (v) { s.year = U.num(v, 2000, 2100, s.year); }, { min: 2000, max: 2100 })),
         field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return { v: m, t: m + '月' }; }), s.month,
           function (e) { s.month = +e.target.value; saveAndRender(); })),
         field('週の始まり', select([{ v: 0, t: '日曜' }, { v: 1, t: '月曜' }], s.weekStartsOn, function (e) { s.weekStartsOn = +e.target.value; saveAndRender(); })),
@@ -233,7 +315,7 @@
       el('div', { class: 'field', style: 'margin-top:16px' }, [el('label', { text: '臨時休業日（年末年始・棚卸しなど）' }),
       el('div', { class: 'row' }, [
         (function () {
-          var di = input('date', '', null);
+          var di = input('date', '');
           return el('div', { class: 'row' }, [di, el('button', {
             class: 'btn sm', text: '追加', onclick: function () {
               var v = di.value;
@@ -272,9 +354,9 @@
       return el('tr', {}, [
         el('td', {}, [input('text', st.name, function (e) { st.name = e.target.value; Store.save(); }, { style: 'width:80px' })]),
         el('td', {}, [input('text', st.short, function (e) { st.short = e.target.value; Store.save(); }, { style: 'width:44px' })]),
-        el('td', {}, [input('time', st.start, function (e) { if (U.isTime(e.target.value)) { st.start = e.target.value; saveAndRender(); } })]),
-        el('td', {}, [input('time', st.end, function (e) { if (U.isTime(e.target.value)) { st.end = e.target.value; saveAndRender(); } })]),
-        el('td', {}, [input('number', st.breakMin, function (e) { st.breakMin = U.num(e.target.value, 0, 600, 0); saveAndRender(); }, { style: 'width:70px', step: 5, min: 0, max: 600 })]),
+        el('td', {}, [liveInput('time', st.start, function (v) { if (U.isTime(v)) st.start = v; })]),
+        el('td', {}, [liveInput('time', st.end, function (v) { if (U.isTime(v)) st.end = v; })]),
+        el('td', {}, [liveInput('number', st.breakMin, function (v) { st.breakMin = U.num(v, 0, 600, 0); }, { style: 'width:70px', step: 5, min: 0, max: 600 })]),
         el('td', {}, [input('color', st.color, function (e) { st.color = e.target.value; Store.save(); }, { style: 'width:44px;padding:0' })]),
         el('td', { class: 'nowrap', text: U.min2h(c.work) + 'h' }),
         el('td', { class: 'nowrap', text: c.night > 0 ? U.min2h(c.night) + 'h' : '—' }),
@@ -290,10 +372,10 @@
     });
 
     p.appendChild(card('勤務区分', '終了が開始より前なら日跨ぎ（夜勤）として計算します。', [
-      el('table', {}, [
+      el('div', { class: 'scroll' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['名称', '略', '開始', '終了', '休憩(分)', '色', '実働', '深夜', '休憩チェック', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, stRows)
-      ]),
+      ])]),
       el('div', { style: 'margin-top:10px' }, [el('button', {
         class: 'btn sm', text: '＋ 勤務区分を追加', onclick: function () {
           var id = 'S' + (D.shiftTypes.length + 1) + Math.floor(Math.random() * 90 + 10);
@@ -323,11 +405,11 @@
     });
 
     p.appendChild(card('必要人数（曜日別）', null, [
-      el('table', {}, [el('thead', {}, [head]), el('tbody', {}, rows)])
+      el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [head]), el('tbody', {}, rows)])])
     ]));
 
     /* 特定日の調整 */
-    var det = el('details', { class: 'rule' }, [el('summary', { text: '特定日の調整（イベント・繁忙日）' })]);
+    var det = el('details', { class: 'rule', 'data-dk': 'overrides' }, [el('summary', { text: '特定日の調整（イベント・繁忙日）' })]);
     var ovTable = el('table', {}, [
       el('thead', {}, [el('tr', {}, [el('th', { text: '日付' })].concat(D.shiftTypes.map(function (st) { return el('th', { text: st.name }); })))]),
       el('tbody', {}, Store.monthDates().map(function (date) {
@@ -508,7 +590,7 @@
         el('td', { text: e.name }),
         el('td', {}, [el('span', { class: 'badge ' + cls, text: label })]),
         el('td', {}, [
-          el('button', { class: 'btn ghost sm', text: '入力する', onclick: function () { staffView = e.id; render(); } }),
+          el('button', { class: 'btn ghost sm', text: '入力する', onclick: function () { staffView = e.id; scrollTo = 'staffSubmit'; render(); } }),
           el('button', {
             class: 'btn ghost sm', text: '全日OKにする', onclick: function () {
               if (!D.avail[e.id]) D.avail[e.id] = {};
@@ -590,10 +672,7 @@
       el('p', { class: 'hint', text: '受け取ったファイルを［希望ファイルを読み込む］、コードなら［コードを貼り付けて取り込む］。何人分でも一度に取り込めます。' })
     ].concat(ta ? [el('p', { style: 'margin-top:16px' }, [el('strong', { text: 'アプリのURL' })]), ta] : [])), [
       ta ? el('button', {
-        class: 'btn', text: 'URLをコピー', onclick: function () {
-          try { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(url); toast('コピーしました'); }
-          catch (e) { toast('コピーできませんでした'); }
-        }
+        class: 'btn', text: 'URLをコピー', onclick: function () { copyText(url, ta); }
       }) : null,
       el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
     ].filter(Boolean));
@@ -842,7 +921,7 @@
     ];
 
     var sub = Store.submissionOf(e.id);
-    return card(e.name + ' さんの希望提出（' + D.settings.year + '年' + D.settings.month + '月）',
+    var box = card(e.name + ' さんの希望提出（' + D.settings.year + '年' + D.settings.month + '月）',
       '行ける日と時間を選んでください。', [
       el('div', { class: 'row', style: 'margin-bottom:8px' }, [
         el('span', { class: 'badge ' + (sub.status === 'submitted' ? 'ok' : 'warn'), text: sub.status === 'submitted' ? '提出済み（' + sub.at + '）' : '未提出' }),
@@ -855,6 +934,8 @@
       ])]),
       el('div', { class: 'row', style: 'margin-top:12px' }, foot)
     ]);
+    box.id = 'staffSubmit';
+    return box;
   }
 
   /* 提出内容をテキストコード化（別端末で入力 → 責任者に送って取り込む用） */
@@ -867,15 +948,7 @@
       ta
     ]);
     modal(e.name + ' さんの提出コード', b, [
-      el('button', {
-        class: 'btn', text: 'コピーする', onclick: function () {
-          try {
-            if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(code);
-            else { ta.select && ta.select(); document.execCommand && document.execCommand('copy'); }
-            toast('コピーしました');
-          } catch (err) { toast('コピーできませんでした。手動で選択してください'); }
-        }
-      }),
+      el('button', { class: 'btn', text: 'コピーする', onclick: function () { copyText(code, ta); } }),
       el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
     ]);
   }
@@ -1101,7 +1174,7 @@
           el('div', { class: 'vd', text: z.reason }),
           z.inputDays === 0 ? el('button', {
             class: 'btn ghost sm', style: 'margin-top:4px',
-            text: 'この人の希望を入力する', onclick: function () { staffView = z.emp.id; switchTab('request'); }
+            text: 'この人の希望を入力する', onclick: function () { staffView = z.emp.id; scrollTo = 'staffSubmit'; switchTab('request'); }
           }) : null
         ]);
       }));
@@ -1366,10 +1439,8 @@
       lines.push(row.concat([days, U.min2h(mins)]).map(U.csv).join(','));
     });
     var blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'shift_' + D.settings.year + U.pad(D.settings.month) + '.csv';
-    a.click();
+    U.download(blob, 'shift_' + D.settings.year + U.pad(D.settings.month) + '.csv');
+    toast('CSVを保存しました');
   }
 
   /* ================= ⑤ 集計 ================= */
@@ -1426,24 +1497,22 @@
   /* ================= ルール設定（「準備」タブの末尾） ================= */
   function renderRules() {
     var p = document.getElementById('panel-setup');
-    var groups = { law: [], ops: [] };
-    Rules.DEFS.forEach(function (d) { groups[d.cat].push(d); });
+    // 法令ルールは常に有効で変更できない。設定として並べても押せないので出さない。
+    var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock; });
 
     function ruleRow(d) {
       var c = Rules.cfg(D, d.id);
-      var body = el('div', { class: 'row', style: 'margin-top:8px' }, []);
-      if (!c.lock) {
-        body.appendChild(checkbox('有効', c.enabled, function (e) { setRule(d.id, { enabled: e.target.checked }); }));
-        body.appendChild(field('区分', select([{ v: 'hard', t: 'ハード（絶対）' }, { v: 'soft', t: 'ソフト（できるだけ）' }], c.type,
-          function (e) { setRule(d.id, { type: e.target.value }); })));
-        if (c.type === 'soft')
-          body.appendChild(field('重み', input('number', c.weight, function (e) { setRule(d.id, { weight: +e.target.value }); }, { step: 100 })));
-        if (d.id === 'OPS-027')
-          body.appendChild(field('インターバル時間', input('number', c.params.hours, function (e) { setRule(d.id, { params: { hours: +e.target.value } }); }, { min: 0, max: 24 })));
-      } else {
-        body.appendChild(el('span', { class: 'badge ng', text: '法令のため常に有効（変更不可）' }));
-      }
-      return el('details', { class: 'rule' }, [
+      var body = el('div', { class: 'row', style: 'margin-top:8px' }, [
+        checkbox('有効', c.enabled, function (e) { setRule(d.id, { enabled: e.target.checked }); }),
+        field('区分', select([{ v: 'hard', t: 'ハード（絶対）' }, { v: 'soft', t: 'ソフト（できるだけ）' }], c.type,
+          function (e) { setRule(d.id, { type: e.target.value }); }))
+      ]);
+      if (c.type === 'soft')
+        body.appendChild(field('重み', liveInput('number', c.weight, function (v) { setRuleQuiet(d.id, { weight: U.num(v, 0, 1e6, 0) }); }, { step: 100, min: 0 })));
+      if (d.id === 'OPS-027')
+        body.appendChild(field('インターバル時間', liveInput('number', c.params.hours, function (v) { setRuleQuiet(d.id, { params: { hours: U.num(v, 0, 24, 0) } }); }, { min: 0, max: 24 })));
+
+      return el('details', { class: 'rule', 'data-dk': 'rule-' + d.id }, [
         el('summary', {}, [
           el('span', { class: d.cat === 'law' ? 'tag-law' : 'tag-ops', text: d.id + ' ' }),
           el('span', { text: d.name + '　' }),
@@ -1454,7 +1523,7 @@
       ]);
     }
 
-    var wrap = el('details', { class: 'rule' }, [
+    var wrap = el('details', { class: 'rule', 'data-dk': 'rules' }, [
       el('summary', { text: '詳しいルール設定（ふだんは触らなくて大丈夫です）' })
     ]);
     var host = el('div', { style: 'margin-top:12px' }, []);
@@ -1484,21 +1553,21 @@
           }
         });
       })),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: '法令ルールはどの設定でも守られます。' })
+      el('p', { class: 'hint', style: 'margin-top:8px', text: '労働基準法のルールはどの設定でも必ず守られるため、ここには出していません。' })
     ]));
 
-    host.appendChild(card('法令ルール（変更不可）', '労働基準法などに基づく制約です。', groups.law.map(ruleRow)));
-    host.appendChild(card('運用ルール', '現場に合わせて調整できます。', groups.ops.map(ruleRow)));
+    host.appendChild(card('運用ルール', '現場に合わせて調整できます。', editable.map(ruleRow)));
   }
 
-  function setRule(id, patch) {
+  /** 値だけ書き換える（画面は作り直さない） */
+  function setRuleQuiet(id, patch) {
     if (!D.ruleConfig[id]) D.ruleConfig[id] = {};
     Object.keys(patch).forEach(function (k) {
       if (k === 'params') D.ruleConfig[id].params = Object.assign({}, D.ruleConfig[id].params || {}, patch.params);
       else D.ruleConfig[id][k] = patch[k];
     });
-    saveAndRender();
   }
+  function setRule(id, patch) { setRuleQuiet(id, patch); saveAndRender(); }
 
   /* ================= スタッフ入力ページ（?input=1） =================
      店の設定が何もなくても単体で動く。名前と行ける日時を入れてファイルに保存し、
@@ -1640,11 +1709,7 @@
   function saveInputFile() {
     var obj = inputPayload(); if (!obj) return;
     var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'シフト希望_' + obj.name + '_' + obj.ym + '.json';
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    U.download(blob, 'シフト希望_' + obj.name + '_' + obj.ym + '.json');
     toast('保存しました。責任者に送ってください');
   }
 
@@ -1656,12 +1721,7 @@
     modal('提出コード', el('div', {}, [
       el('p', { class: 'hint', text: 'このコードをコピーして、LINEなどで責任者に送ってください。' }), ta
     ]), [
-      el('button', {
-        class: 'btn', text: 'コピー', onclick: function () {
-          try { if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(code); toast('コピーしました'); }
-          catch (e) { toast('手動で選択してコピーしてください'); }
-        }
-      }),
+      el('button', { class: 'btn', text: 'コピー', onclick: function () { copyText(code, ta); } }),
       el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
     ]);
   }
@@ -1697,10 +1757,10 @@
   }
 
   function render() {
+    var snap = snapshotUI();
     D = Store.get();
     syncMode();
-    if (mode === 'input') { renderInputPage(); return; }
-
+    if (mode === 'input') { renderInputPage(); restoreUI(snap); return; }
 
     if (currentTab === 'setup') renderSetup();
     if (currentTab === 'staff') renderStaff();
@@ -1710,20 +1770,42 @@
 
     // どのタブでも先頭に「いまどこまで進んでいるか」を出す
     var p = document.getElementById('panel-' + currentTab);
-    if (!p) return;
-    if (p && p.insertBefore && p.children && p.children.length) p.insertBefore(guideBar(), p.children[0]);
-    else if (p) p.appendChild(guideBar());
+    if (p) {
+      if (p.insertBefore && p.children && p.children.length) p.insertBefore(guideBar(), p.children[0]);
+      else p.appendChild(guideBar());
+    }
+    restoreUI(snap);
+
+    if (scrollTo) {
+      var target = document.getElementById(scrollTo);
+      scrollTo = '';
+      if (target && target.scrollIntoView) {
+        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        catch (e) { target.scrollIntoView(); }
+      }
+    }
+  }
+
+  /** 押された場所から上へたどって、目印のついた要素を探す（枠内の余白を押しても落ちないように） */
+  function hitTarget(node, key, stop) {
+    var t = node, n = 0;
+    while (t && t !== stop && n++ < 20) {
+      if (t.dataset && t.dataset[key]) return t.dataset[key];
+      t = t.parentNode;
+    }
+    return '';
   }
 
   var modesEl = document.getElementById('modes');
   if (modesEl) modesEl.addEventListener('click', function (e) {
-    var t = e.target;
-    while (t && !t.dataset.mode) t = t.parentNode;
-    if (t && t.dataset.mode) setMode(t.dataset.mode);
+    var m = hitTarget(e.target, 'mode', modesEl.parentNode);
+    if (m) setMode(m);
   });
 
-  document.getElementById('tabs').addEventListener('click', function (e) {
-    if (e.target.classList.contains('tab')) switchTab(e.target.dataset.tab);
+  var tabsEl = document.getElementById('tabs');
+  tabsEl.addEventListener('click', function (e) {
+    var t = hitTarget(e.target, 'tab', tabsEl.parentNode);
+    if (t) switchTab(t);
   });
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });

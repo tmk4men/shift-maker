@@ -76,6 +76,22 @@ var U = (function () {
     return e;
   }
 
+  /** ファイルとして保存する。
+      <a> を本文に入れずに click() すると、Firefox などでは何も起きない（＝押しても無反応に見える）。 */
+  function download(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name; a.rel = 'noopener';
+    a.style.display = 'none';
+    var host = document.body || document.documentElement;
+    if (host && host.appendChild) host.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      try { if (a.parentNode && a.parentNode.removeChild) a.parentNode.removeChild(a); } catch (e) { }
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
   function esc(s) {
     return String(s === undefined || s === null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -163,7 +179,7 @@ var U = (function () {
   return {
     pad: pad, ymd: ymd, parseYmd: parseYmd, daysInMonth: daysInMonth, weekdayOf: weekdayOf,
     WD: WD, monthDates: monthDates, addDays: addDays, hm2min: hm2min, min2hm: min2hm,
-    min2h: min2h, overlap: overlap, yen: yen, el: el, esc: esc, uid: uid, clone: clone,
+    min2h: min2h, overlap: overlap, yen: yen, el: el, esc: esc, uid: uid, clone: clone, download: download,
     num: num, isTime: isTime, csv: csv, jpHolidays: jpHolidays, nthMonday: nthMonday
   };
 })();

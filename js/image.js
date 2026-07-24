@@ -184,10 +184,7 @@ var ShiftImage = (function () {
       : save(dataURLtoBlob(canvas.toDataURL('image/png')), name);
   }
   function save(blob, name) {
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name; a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    U.download(blob, name);
   }
   function dataURLtoBlob(u) {
     var b = atob(u.split(',')[1]), arr = new Uint8Array(b.length);
