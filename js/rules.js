@@ -9,14 +9,14 @@ var Rules = (function () {
      ========================================================= */
   var DEFS = [
     // ---- 法令（ハード固定・無効化不可） ----
-    { id: 'LAW-001', cat: 'law', name: '1日8時間・週40時間', type: 'hard', lock: true, params: { daily: 480, weekly: 2400 }, desc: '法定労働時間。36協定がない場合は超過不可。' },
-    { id: 'LAW-005', cat: 'law', name: '36協定なしの時間外禁止', type: 'hard', lock: true, params: {}, desc: '36協定が未締結なら法定時間超の勤務を割り当てない。' },
-    { id: 'LAW-006', cat: 'law', name: '時間外労働の上限（月45時間）', type: 'hard', lock: true, params: { monthlyOt: 2700 }, desc: '36協定があっても時間外労働は原則 月45時間・年360時間まで。' },
-    { id: 'LAW-020', cat: 'law', name: '休憩時間', type: 'hard', lock: true, params: {}, desc: '6時間超は45分以上、8時間超は60分以上。勤務区分マスタを検証。' },
-    { id: 'LAW-024', cat: 'law', name: '週1日以上の休日', type: 'hard', lock: true, params: { maxRun: 6 }, desc: '連続勤務は最大6日まで（週1日の休日を確保）。' },
-    { id: 'LAW-040', cat: 'law', name: '18歳未満の深夜勤務禁止', type: 'hard', lock: true, params: {}, desc: '22:00〜5:00に及ぶ勤務を割り当てない。' },
-    { id: 'LAW-041', cat: 'law', name: '18歳未満の時間外禁止', type: 'hard', lock: true, params: {}, desc: '1日8時間・週40時間を厳守（36協定があっても超過不可）。' },
-    { id: 'LAW-060', cat: 'law', name: '有給・確定休の尊重', type: 'hard', lock: true, params: {}, desc: '有給申請日・絶対休の日は勤務にしない。' },
+    { id: 'LAW-001', cat: 'law', name: '1日8時間・週40時間', type: 'hard', lock: true, params: { daily: 480, weekly: 2400 }, ref: '労働基準法 第32条（法定労働時間）', desc: '1日8時間・週40時間を超えないようにします。' },
+    { id: 'LAW-005', cat: 'law', name: '36協定なしの時間外禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第36条（時間外・休日労働の協定）', desc: '36協定を結んでいない前提で、法定時間を超える勤務は入れません。' },
+    { id: 'LAW-006', cat: 'law', name: '時間外労働の上限（月45時間）', type: 'hard', lock: true, params: { monthlyOt: 2700 }, ref: '労働基準法 第36条第4項（時間外労働の上限）', desc: '36協定があっても時間外労働は原則 月45時間・年360時間まで。' },
+    { id: 'LAW-020', cat: 'law', name: '休憩時間', type: 'hard', lock: true, params: {}, ref: '労働基準法 第34条（休憩）', desc: '6時間を超える勤務は45分以上、8時間を超える勤務は60分以上の休憩があるか確認します。' },
+    { id: 'LAW-024', cat: 'law', name: '週1日以上の休日', type: 'hard', lock: true, params: { maxRun: 6 }, ref: '労働基準法 第35条（休日）', desc: '連続勤務は6日までにして、週に1日は必ず休みを入れます。' },
+    { id: 'LAW-040', cat: 'law', name: '18歳未満の深夜勤務禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第61条（深夜業の制限）', desc: '22時から翌5時にかかる勤務には入れません。' },
+    { id: 'LAW-041', cat: 'law', name: '18歳未満の時間外禁止', type: 'hard', lock: true, params: {}, ref: '労働基準法 第60条（年少者の労働時間）', desc: '1日8時間・週40時間を厳守（36協定があっても超過不可）。' },
+    { id: 'LAW-060', cat: 'law', name: '有給・確定休の尊重', type: 'hard', lock: true, params: {}, ref: '労働基準法 第39条（年次有給休暇）', desc: '有給を使う日と、絶対に休みたい日には出勤させません。' },
 
     // ---- 運用（設定変更可） ----
     { id: 'OPS-001', cat: 'ops', name: '必要な人数をそろえる', type: 'hard', params: {}, desc: 'その日・その勤務に決めた人数をそろえます。' },
@@ -60,7 +60,7 @@ var Rules = (function () {
     if (!d) return { enabled: false };
     var o = data.ruleConfig && data.ruleConfig[id] ? data.ruleConfig[id] : {};
     return {
-      id: id, name: d.name, cat: d.cat, lock: !!d.lock, desc: d.desc,
+      id: id, name: d.name, cat: d.cat, lock: !!d.lock, desc: d.desc, ref: d.ref || '',
       enabled: o.enabled === undefined ? true : (d.lock ? true : !!o.enabled),
       type: d.lock ? d.type : (o.type || d.type),
       weight: o.weight === undefined ? (d.weight === undefined ? 1000 : d.weight) : +o.weight,

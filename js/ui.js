@@ -313,7 +313,8 @@
       menuSection('使い方', [
         menuItem('はじめての方へ', '準備からシフト作成までの流れ', showHowToUse),
         menuItem('スタッフへの渡し方', '希望を集める手順', showHowToCollect),
-        menuItem('このアプリの決まり', '変更できない動きの説明', showFixedRules)
+        menuItem('このアプリの決まり', '変更できない動きの説明', showFixedRules),
+        menuItem('守っている法律', '労働基準法のどこを見ているか', showLaws)
       ]),
       menuSection('データ', [
         menuItem('この月のシフトを消す', '希望や登録はそのまま残ります', function () {
@@ -344,6 +345,34 @@
       el('p', { style: 'margin-top:16px' }, [el('strong', { text: '画面の上の案内' })]),
       el('p', { class: 'hint', text: '「次にやること」が常に出ます。迷ったらそれに従ってください。' })
     ]), [el('button', { class: 'btn ghost', text: '戻る', onclick: openMenu })]);
+  }
+
+  /** 何を根拠にシフトを止めているのかを、条文まで含めて公開する */
+  function showLaws() {
+    var laws = Rules.DEFS.filter(function (d) { return d.cat === 'law'; });
+    var b = el('div', {}, [
+      el('p', { class: 'hint', text:
+        'シフトを作るとき、次の決まりは必ず守ります。設定で外すことはできません。' })
+    ]);
+    laws.forEach(function (d) {
+      b.appendChild(el('div', { class: 'violation hard', style: 'margin-bottom:8px' }, [
+        el('div', { class: 'vt', text: d.name }),
+        el('div', { class: 'vd', text: d.desc }),
+        d.ref ? el('div', { class: 'vd', style: 'margin-top:2px;font-weight:600', text: d.ref }) : null
+      ]));
+    });
+    b.appendChild(el('h4', { text: 'このアプリが見ていないこと', style: 'margin-top:20px' }));
+    [
+      '割増賃金の計算（深夜25%・休日35%など）。集計の金額は目安です',
+      '最低賃金の確認。時給は入力したまま計算します',
+      '休業手当（シフトを減らしたときの補償）',
+      '変形労働時間制・フレックスタイム制の特例',
+      '妊産婦の請求による制限'
+    ].forEach(function (t) { b.appendChild(el('div', { class: 'vd', text: '・' + t })); });
+    b.appendChild(el('p', { class: 'hint', style: 'margin-top:12px', text:
+      '最終的な適法性の判断は、就業規則と労使協定にもとづいて行ってください。' }));
+
+    modal('守っている法律', b, [el('button', { class: 'btn ghost', text: '戻る', onclick: openMenu })]);
   }
 
   function showFixedRules() {

@@ -276,6 +276,18 @@ tryRun('メニューから決まりが読める', () => {
   if (txt.indexOf('法令は必ず守ります') < 0) throw new Error('法令の説明がない');
 });
 
+tryRun('メニューから、守っている法律を条文つきで見られる', () => {
+  byId['btnMenu'].click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n) === '守っている法律');
+  if (!b) throw new Error('メニューに「守っている法律」がない');
+  b.click();
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  ['第32条', '第34条', '第35条', '第36条', '第39条', '第60条', '第61条']
+    .forEach(t => { if (txt.indexOf(t) < 0) throw new Error('条文「' + t + '」が出ていない'); });
+  if (txt.indexOf('このアプリが見ていないこと') < 0) throw new Error('できないことの断りがない');
+  if (txt.indexOf('割増賃金') < 0) throw new Error('割増賃金を見ていない旨がない');
+});
+
 tryRun('メニューから初期化できる', () => {
   byId['btnMenu'].click();
   const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('全部消して最初から') >= 0);
