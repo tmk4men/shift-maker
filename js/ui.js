@@ -457,7 +457,7 @@
       ]);
     });
 
-    p.appendChild(card('勤務区分', '終了が開始より前なら日跨ぎ（夜勤）として計算します。', [
+    p.appendChild(card('勤務区分（早番・遅番など）', '終了が開始より前の時刻なら、日をまたぐ夜勤として計算します。', [
       el('div', { class: 'scroll' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['名称', '略', '開始', '終了', '休憩(分)', '色', '実働', '深夜', '休憩チェック', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, stRows)
@@ -549,9 +549,9 @@
       ]);
     });
 
-    p.appendChild(card('従業員', '優遇度をマイナスにしても、最低出勤日数は必ず守ります。', [
+    p.appendChild(card('従業員', '「入りやすさ」をマイナスにしても、最低出勤日数は必ず守ります。', [
       el('div', { class: 'scroll' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['氏名 / 属性', '時給', '担当可能', '出勤日数', '連勤上限', '優遇度', '年収上限', ''].map(function (h) { return el('th', { text: h }); }))]),
+        el('thead', {}, [el('tr', {}, ['氏名 / 属性', '時給', '担当可能', '出勤日数', '連勤上限', '入りやすさ', '年収上限', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
       ])]),
       el('div', { style: 'margin-top:12px' }, [el('button', {
@@ -606,7 +606,7 @@
       field('月間の上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月間夜勤上限(0=なし)', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('週の上限時間(0=なし)', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
-      field('優遇度 -3〜+3', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
+      field('シフトの入りやすさ', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
         return { v: v, t: v > 0 ? '+' + v + '（多めに）' : v < 0 ? v + '（控えめに）' : '0（標準）' };
       }), e.priority, function (ev) { e.priority = +ev.target.value; }))
     ]));
@@ -1124,7 +1124,7 @@
         res.violations.length ? el('div', { style: 'margin-top:12px' }, res.violations.slice(0, 60).map(function (v) {
           return el('div', { class: 'violation ' + (v.level === 'hard' ? 'hard' : '') }, [
             el('div', { class: 'vt', text: v.msg }),
-            el('div', { class: 'vd', text: (Rules.DEF_MAP[v.ruleId] ? v.ruleId + ' ' + Rules.DEF_MAP[v.ruleId].name : v.ruleId) })
+            el('div', { class: 'vd', text: Rules.DEF_MAP[v.ruleId] ? Rules.DEF_MAP[v.ruleId].name : '' })
           ]);
         })) : el('p', { class: 'muted', text: 'ルール違反はありません。' }),
         res.log && res.log.length ? el('div', { style: 'margin-top:8px' }, res.log.map(function (l) { return el('div', { class: 'vd', text: '・' + l }); })) : null
@@ -1164,7 +1164,7 @@
 
     /* 日別の充足状況 */
     var needRows = D.shiftTypes.map(function (st) {
-      return el('tr', {}, [el('td', { class: 'namecol', text: st.name + ' 充足' })].concat(dates.map(function (d) {
+      return el('tr', {}, [el('td', { class: 'namecol', text: st.name + ' の人数' })].concat(dates.map(function (d) {
         var need = Store.needOf(d, st.id), got = Store.assignedOf(d, st.id).length;
         if (need === 0 && got === 0) return el('td', { class: 'cell-shift empty', text: '' });
         var okc = got >= need;
@@ -1265,6 +1265,13 @@
   }
 
   function zeroDayCard() {
+    // まだ一度も作っていない月で「0日の人」を並べても、作り忘れているだけ。
+    // 「条件が合わず入りませんでした」は事実と違ううえ、失敗したように見える。
+    var made = Store.monthDates().some(function (d) {
+      return D.shiftTypes.some(function (st) { return Store.assignedOf(d, st.id).length > 0; });
+    });
+    if (!made) return null;
+
     var zs = zeroDayStaff();
     if (!zs.length) return null;
     return card('今月シフトが0日の人（' + zs.length + '名）',
@@ -1340,7 +1347,7 @@
     D.shiftTypes.forEach(function (st) {
       if (cur === st.id) return;
       var ngs = Solver.checkManual(D, assignmentsWithout(e.id, date), e.id, date, st.id);
-      ngs.forEach(function (n) { ngList.push(st.name + '：' + n.msg + '（' + n.ruleId + '）'); });
+      ngs.forEach(function (n) { ngList.push(st.name + '：' + n.msg); });
     });
     if (ngList.length) {
       b.appendChild(el('h4', { text: '入れられない理由' }));
@@ -1600,23 +1607,55 @@
     // 法令ルールは常に有効で変更できない。設定として並べても押せないので出さない。
     var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock; });
 
+    /* 方針の選択。ふつうはここだけ触れば足りるので、畳まずに表に出す */
+    var PRESETS = {
+      balanced: { label: 'バランス重視', desc: '希望と公平さの両方をほどよく（最初はこれ）', w: {} },
+      request: { label: '希望を通したい', desc: '休みの希望をできるだけ通す。かわりに偏りは増えます', w: { 'OPS-030': 20000, 'OPS-031': 8000, 'OPS-080': 400, 'OPS-081': 300, 'OPS-084': 800 } },
+      fair: { label: '公平にしたい', desc: '夜勤・土日・労働時間の偏りを小さく', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
+      cost: { label: '人件費を抑えたい', desc: '時給の高い人の出番を減らす（予算の入力が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
+    };
+    var cur = D.settings.policy || 'balanced';
+
+    p.appendChild(card('シフトの方針', '迷ったら「バランス重視」のままで大丈夫です。', [
+      el('div', { class: 'row' }, Object.keys(PRESETS).map(function (k) {
+        var ps = PRESETS[k];
+        return el('button', {
+          class: 'btn ' + (cur === k ? '' : 'ghost'), text: ps.label, title: ps.desc,
+          onclick: function () {
+            Object.keys(D.ruleConfig).forEach(function (id) { delete D.ruleConfig[id].weight; });
+            Object.keys(ps.w).forEach(function (id) {
+              if (!D.ruleConfig[id]) D.ruleConfig[id] = {};
+              D.ruleConfig[id].weight = ps.w[id];
+            });
+            D.settings.policy = k;
+            saveAndRender(); toast('「' + ps.label + '」で組みます');
+          }
+        });
+      })),
+      el('p', { class: 'hint', style: 'margin-top:8px', text: PRESETS[cur].desc }),
+      el('p', { class: 'hint', text: 'どれを選んでも、労働基準法のルールは必ず守ります。' })
+    ]));
+
+    /* ここから先は、こだわりのある人だけが開く場所 */
     function ruleRow(d) {
       var c = Rules.cfg(D, d.id);
       var body = el('div', { class: 'row', style: 'margin-top:8px' }, [
-        checkbox('有効', c.enabled, function (e) { setRule(d.id, { enabled: e.target.checked }); }),
-        field('区分', select([{ v: 'hard', t: 'ハード（絶対）' }, { v: 'soft', t: 'ソフト（できるだけ）' }], c.type,
+        checkbox('このルールを使う', c.enabled, function (e) { setRule(d.id, { enabled: e.target.checked }); }),
+        field('守り方', select([{ v: 'hard', t: '必ず守る' }, { v: 'soft', t: 'できるだけ守る' }], c.type,
           function (e) { setRule(d.id, { type: e.target.value }); }))
       ]);
       if (c.type === 'soft')
-        body.appendChild(field('重み', liveInput('number', c.weight, function (v) { setRuleQuiet(d.id, { weight: U.num(v, 0, 1e6, 0) }); }, { step: 100, min: 0 })));
+        body.appendChild(field('優先度（大きいほど優先）', liveInput('number', c.weight, function (v) { setRuleQuiet(d.id, { weight: U.num(v, 0, 1e6, 0) }); }, { step: 100, min: 0 })));
       if (d.id === 'OPS-027')
-        body.appendChild(field('インターバル時間', liveInput('number', c.params.hours, function (v) { setRuleQuiet(d.id, { params: { hours: U.num(v, 0, 24, 0) } }); }, { min: 0, max: 24 })));
+        body.appendChild(field('勤務と勤務の間隔（時間）', liveInput('number', c.params.hours, function (v) { setRuleQuiet(d.id, { params: { hours: U.num(v, 0, 24, 0) } }); }, { min: 0, max: 24 })));
 
       return el('details', { class: 'rule', 'data-dk': 'rule-' + d.id }, [
         el('summary', {}, [
-          el('span', { class: d.cat === 'law' ? 'tag-law' : 'tag-ops', text: d.id + ' ' }),
           el('span', { text: d.name + '　' }),
-          el('span', { class: 'badge ' + (c.type === 'hard' ? 'ng' : 'warn'), text: c.type === 'hard' ? '必須' : '重み ' + c.weight })
+          el('span', {
+            class: 'badge ' + (c.enabled ? (c.type === 'hard' ? 'ng' : 'warn') : 'ok'),
+            text: !c.enabled ? '使わない' : c.type === 'hard' ? '必ず守る' : 'できるだけ守る'
+          })
         ]),
         el('p', { class: 'hint', text: d.desc }),
         body
@@ -1624,39 +1663,11 @@
     }
 
     var wrap = el('details', { class: 'rule', 'data-dk': 'rules' }, [
-      el('summary', { text: '詳しいルール設定（ふだんは触らなくて大丈夫です）' })
+      el('summary', { text: '細かく決める（ふだんは触らなくて大丈夫です）' }),
+      el('p', { class: 'hint', text: '上の方針で足りないときだけ、1つずつ調整できます。' }),
+      el('div', { style: 'margin-top:12px' }, editable.map(ruleRow))
     ]);
-    var host = el('div', { style: 'margin-top:12px' }, []);
-    wrap.appendChild(host);
     p.appendChild(el('div', { class: 'card' }, [wrap]));
-
-    /* かんたん設定（プリセット） */
-    var PRESETS = {
-      balanced: { label: 'バランス重視', desc: '希望と公平性のバランス（初期設定）', w: {} },
-      request: { label: '希望重視', desc: '希望休をできるだけ通す。公平性は少し犠牲に', w: { 'OPS-030': 20000, 'OPS-031': 8000, 'OPS-080': 400, 'OPS-081': 300, 'OPS-084': 800 } },
-      fair: { label: '公平重視', desc: '夜勤・土日・労働時間の偏りを最小に', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
-      cost: { label: '人件費重視', desc: '単価の高い人の投入を抑える（予算設定が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
-    };
-    host.appendChild(card('かんたん設定', '方針を選ぶと、下の重みがまとめて変わります。', [
-      el('div', { class: 'row' }, Object.keys(PRESETS).map(function (k) {
-        var ps = PRESETS[k];
-        return el('button', {
-          class: 'btn ghost', text: ps.label, title: ps.desc, onclick: function () {
-            Object.keys(ps.w).forEach(function (id) {
-              if (!D.ruleConfig[id]) D.ruleConfig[id] = {};
-              D.ruleConfig[id].weight = ps.w[id];
-            });
-            if (k === 'balanced') {
-              Object.keys(D.ruleConfig).forEach(function (id) { delete D.ruleConfig[id].weight; });
-            }
-            saveAndRender(); toast(ps.label + ' に変更しました');
-          }
-        });
-      })),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: '労働基準法のルールはどの設定でも必ず守られるため、ここには出していません。' })
-    ]));
-
-    host.appendChild(card('運用ルール', '現場に合わせて調整できます。', editable.map(ruleRow)));
   }
 
   /** 値だけ書き換える（画面は作り直さない） */

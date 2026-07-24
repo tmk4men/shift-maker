@@ -215,12 +215,12 @@ tryRun('［シフトを作成する］を押す', () => {
   b.click();
 });
 
-tryRun('ルール設定は「準備」タブの中にある', () => {
+tryRun('ルールの調整は「準備」タブの中にある', () => {
   openTab('setup');
   const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
-  if (txt.indexOf('詳しいルール設定') < 0) throw new Error('ルール設定が準備タブにない');
+  if (txt.indexOf('細かく決める') < 0) throw new Error('ルールの調整が準備タブにない');
   const inp = byId['panel-setup'].all().find(n => n.tagName === 'INPUT' && n.attrs.type === 'number' && String(n.attrs.step) === '100');
-  if (!inp) throw new Error('重みの入力欄が見つからない');
+  if (!inp) throw new Error('優先度の入力欄が見つからない');
   inp.value = '999';
   inp.fire('input', { target: inp });
 });
@@ -355,13 +355,41 @@ tryRun('スタッフへの渡し方の案内が出る', () => {
 /* ---------- 押しても反応しないように見える不具合 ---------- */
 console.log('\n=== 反応の確認 ===');
 
-tryRun('詳しいルール設定に、変更できない法令ルールを並べない', () => {
+tryRun('ルールの画面に、内部の記号や変更できない法令を出さない', () => {
   setMode('manage');
   openTab('setup');
   const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
-  if (txt.indexOf('LAW-') >= 0) throw new Error('変更できない法令ルールが設定欄に出ている');
-  if (txt.indexOf('運用ルール') < 0) throw new Error('調整できる運用ルールまで消えている');
-  if (txt.indexOf('OPS-') < 0) throw new Error('運用ルールの中身がない');
+  if (/LAW-|OPS-/.test(txt)) throw new Error('内部の記号（LAW-/OPS-）が画面に出ている');
+  ['ハード', 'ソフト', '重み'].forEach(w => {
+    if (txt.indexOf(w) >= 0) throw new Error('専門用語が残っている: ' + w);
+  });
+  if (txt.indexOf('休みの希望をかなえる') < 0) throw new Error('調整できる運用ルールまで消えている');
+  if (txt.indexOf('1日8時間') >= 0) throw new Error('変更できない法令ルールが設定欄に出ている');
+});
+
+tryRun('シフトの方針は畳まずに出す（ふつうはここだけ触ればよい）', () => {
+  openTab('setup');
+  const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
+  ['シフトの方針', 'バランス重視', '希望を通したい', '公平にしたい', '人件費を抑えたい']
+    .forEach(t => { if (txt.indexOf(t) < 0) throw new Error('方針の選択に「' + t + '」がない'); });
+
+  const b = findButton(byId['panel-setup'], '公平にしたい');
+  b.click();
+  if (sandbox.Store.get().settings.policy !== 'fair') throw new Error('選んだ方針が保存されない');
+});
+
+tryRun('シフトを作る前に「0日の人」を並べない', () => {
+  sandbox.Store.loadDemo();
+  const d = sandbox.Store.get();
+  Object.keys(d.assignments).forEach(k => delete d.assignments[k]);
+  d.lastResult = null;
+  sandbox.Store.save();
+  openTab('shift');
+  const txt = byId['panel-shift'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('シフトが0日の人') >= 0)
+    throw new Error('まだ作っていないのに「0日の人」の警告が出る');
+  if (txt.indexOf('条件が合わず入りませんでした') >= 0)
+    throw new Error('作っていないのに「条件が合わなかった」と表示している');
 });
 
 tryRun('入力中は画面を作り直さない（打った文字が消えない）', () => {

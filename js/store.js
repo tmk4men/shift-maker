@@ -75,7 +75,8 @@ var Store = (function () {
         weekStartsOn: 0,        // 週の始まり 0=日曜 1=月曜
         budget: 0,              // 月間人件費予算（0=無制限）
         closedWeekdays: [],     // 定休日の曜日 [0=日 … 6=土]
-        closedDates: []         // 臨時休業日 'YYYY-MM-DD'
+        closedDates: [],        // 臨時休業日 'YYYY-MM-DD'
+        policy: 'balanced'      // シフトの方針（balanced / request / fair / cost）
       },
       // 祝日は自動計算（util.jpHolidays）。未提出日は出勤させない。
       // 必要人数を超える配置はしない。この3つは設定にせず固定。
