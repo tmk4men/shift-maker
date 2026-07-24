@@ -371,6 +371,8 @@ var Store = (function () {
     var e = U.clone(sampleData().employees[0]);
     e.id = U.uid('e');
     e.name = name || '新しい従業員';
+    // 見本の店長を複製しているので、属性はすべて初期値に戻す（時給の消し忘れは人件費に直結する）
+    e.wage = 1100; e.employment = 'part';
     e.leader = false; e.certified = false; e.trainer = false; e.newbie = false; e.minor = false;
     e.priority = 0; e.minDays = 0; e.maxDays = 20; e.maxConsecutive = 5;
     e.minHoursMonth = 0; e.maxHoursMonth = 0; e.maxNights = 0; e.weeklyHoursCap = 0;

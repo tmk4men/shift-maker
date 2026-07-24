@@ -5,7 +5,6 @@
   var currentTab = 'setup';
   var staffView = '';     // 提出画面を開いている従業員ID
   var scrollTo = '';      // 描画のあと、この要素まで画面を動かす（開いた先が画面外だと無反応に見えるため）
-  var staffPage = '';     // スタッフ専用モードの表示（shift = 自分のシフト / submit = 希望提出）
 
   /* 使う人のモード（URLではなく画面で切り替える）
      input  … スタッフが自分の希望を入力する画面
@@ -427,7 +426,7 @@
       }))
     ]);
     det.appendChild(el('div', { class: 'scroll', style: 'max-height:340px;margin-top:8px' }, [ovTable]));
-    p.appendChild(card('特定日の調整', null, [det]));
+    p.appendChild(el('div', { class: 'card' }, [det]));   // 見出しは開閉の見出しだけで足りる
 
     renderRules();   // 詳しいルール設定は、このタブの末尾に畳んで置く
   }
@@ -470,20 +469,15 @@
       ])]),
       el('div', { style: 'margin-top:12px' }, [el('button', {
         class: 'btn', text: '＋ 従業員を追加', onclick: function () {
-          var e = {
-            id: U.uid('e'), name: '新しい従業員', wage: 1100, employment: 'part',
-            leader: false, certified: false, trainer: false, newbie: false, minor: false,
-            canShift: D.shiftTypes.map(function (s) { return s.id; }), ngWeekdays: [], priority: 0,
-            minDays: 0, maxDays: 20, maxConsecutive: 5, maxHoursMonth: 0, maxNights: 0, weeklyHoursCap: 0,
-            ngPartners: [], goodPartners: [], trainerId: '', incomeCap: 0, ytdEarnings: 0, note: ''
-          };
-          D.employees.push(e); Store.save(); editEmp(e);
+          var e = Store.addEmployee('');   // 初期値の決め方は Store に一本化する
+          D = Store.get(); editEmp(e, true);
         }
       })])
     ]));
   }
 
-  function editEmp(e) {
+  /** isNew … 追加ボタンから開いた場合。キャンセルされたら登録ごと取り消す */
+  function editEmp(e, isNew) {
     var b = el('div', {}, []);
     b.appendChild(el('div', { class: 'row' }, [
       field('氏名', input('text', e.name, function (ev) { e.name = ev.target.value; })),
@@ -570,7 +564,12 @@
     ]));
 
     modal('従業員の編集', b, [
-      el('button', { class: 'btn ghost', text: 'キャンセル', onclick: function () { D = Store.load(); closeModal(); render(); } }),
+      el('button', {
+        class: 'btn ghost', text: 'キャンセル', onclick: function () {
+          if (isNew) Store.removeEmployee(e.id);
+          D = Store.load(); closeModal(); render();
+        }
+      }),
       el('button', { class: 'btn', text: '保存', onclick: function () { Store.save(); closeModal(); render(); toast('保存しました'); } })
     ]);
   }
@@ -1809,6 +1808,11 @@
   });
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var m = document.getElementById('modal');
+    if (m && m.classList && !m.classList.contains('hidden')) closeModal();
+  });
   var menuBtn = document.getElementById('btnMenu');
   if (menuBtn) menuBtn.addEventListener('click', openMenu);
   document.getElementById('fileImport').addEventListener('change', function (e) {

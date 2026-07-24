@@ -61,8 +61,9 @@ const document = {
   querySelector: () => makeNode('div'),
   querySelectorAll: sel => sel === '.tab' ? tabButtons : sel === '.mode' ? modeButtons
     : sel === '.panel' ? allPanels : [],
-  addEventListener() { }
+  addEventListener(ev, fn) { if (ev === 'keydown') documentKeydown.push(fn); }
 };
+const documentKeydown = [];
 
 const store = {};
 const localStorage = {
@@ -394,6 +395,50 @@ tryRun('ファイル保存は <a> を本文に入れてから押す', () => {
   if (!a) throw new Error('<a> が本文に入っていない（Firefox などで保存されない）');
   if (!a._clicked) throw new Error('<a> が押されていない');
   if (String(a.download).indexOf('.csv') < 0) throw new Error('ファイル名が違う: ' + a.download);
+});
+
+tryRun('自動で登録された人が、見本の店長の時給を引き継がない', () => {
+  const e = sandbox.Store.addEmployee('取り込みで増えた人');
+  if (e.wage !== 1100) throw new Error('時給が初期値でない（人件費がずれる）: ' + e.wage);
+  if (e.employment !== 'part') throw new Error('雇用区分が初期値でない: ' + e.employment);
+  if (e.leader || e.certified || e.trainer) throw new Error('属性が引き継がれている');
+  ['minHoursMonth', 'maxHoursMonth', 'incomeCap', 'ytdEarnings'].forEach(k => {
+    if (e[k] !== 0) throw new Error(k + ' が初期値でない: ' + e[k]);
+  });
+});
+
+tryRun('［＋従業員を追加］も同じ初期値で作られる', () => {
+  openTab('staff');
+  const before = sandbox.Store.get().employees.length;
+  findButton(byId['panel-staff'], '＋ 従業員を追加').click();
+  const list = sandbox.Store.get().employees;
+  if (list.length !== before + 1) throw new Error('追加されていない');
+  const e = list[list.length - 1];
+  if (e.wage !== 1100 || e.minHoursMonth !== 0) throw new Error('初期値が違う: ' + JSON.stringify(e));
+});
+
+tryRun('Esc でダイアログが閉じる', () => {
+  byId['btnMenu'].click();
+  let closed = false;
+  const cl = byId['modal'].classList;
+  const keepContains = cl.contains, keepAdd = cl.add;
+  cl.contains = () => false;                               // 開いている状態
+  cl.add = c => { if (c === 'hidden') closed = true; };
+  try { documentKeydown.forEach(f => f({ key: 'Escape' })); }
+  finally { cl.contains = keepContains; cl.add = keepAdd; }
+  if (!closed) throw new Error('Esc で閉じない');
+});
+
+tryRun('追加した従業員は、キャンセルすると登録ごと取り消される', () => {
+  openTab('staff');
+  const before = sandbox.Store.get().employees.length;
+  findButton(byId['panel-staff'], '＋ 従業員を追加').click();
+  if (sandbox.Store.get().employees.length !== before + 1) throw new Error('追加されていない');
+  const cancel = byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && (n._text || '') === 'キャンセル');
+  if (!cancel) throw new Error('キャンセルボタンがない');
+  cancel.click();
+  if (sandbox.Store.get().employees.length !== before)
+    throw new Error('キャンセルしたのに「新しい従業員」が残る');
 });
 
 tryRun('使う人の切り替えは、余白を押しても落ちない', () => {
