@@ -146,6 +146,16 @@ function findButton(panel, text) {
   return panel.all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf(text) >= 0);
 }
 
+/** 「希望を取り込む」→「送られてきた文を貼り付ける」を開く */
+function openImportPaste() {
+  const outer = findButton(byId['panel-request'], '希望を取り込む');
+  if (!outer) throw new Error('［希望を取り込む］がない');
+  outer.click();
+  const paste = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('貼り付ける') >= 0);
+  if (!paste) throw new Error('貼り付ける選択肢がない');
+  paste.click();
+}
+
 tryRun('［シフトを自動作成］を押す', () => {
   openTab('shift');
   const b = findButton(byId['panel-shift'], 'シフトを自動作成');
@@ -233,9 +243,12 @@ tryRun('ルールの調整は「準備」タブの中にある', () => {
 
 tryRun('集計タブが再計算される', () => openTab('summary'));
 
-tryRun('CSV出力', () => {
+tryRun('CSV出力（配る・保存の中）', () => {
   openTab('shift');
-  findButton(byId['panel-shift'], 'CSV出力').click();
+  findButton(byId['panel-shift'], '配る・保存').click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('CSVで書き出す') >= 0);
+  if (!b) throw new Error('配る・保存にCSVがない');
+  b.click();
 });
 
 tryRun('メニューが開く', () => {
@@ -329,9 +342,7 @@ tryRun('スタッフが入力 → コード化 → 責任者が取り込む', ()
   sandbox.Store.save();
   setMode('manage');
   openTab('request');
-  const imp = byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードを貼り付けて取り込む') >= 0);
-  if (!imp) throw new Error('取り込みボタンがない');
-  imp.click();
+  openImportPaste();
   const ta2 = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
   ta2.value = code;
   const next = byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && btnText(n) === '確認へ進む');
@@ -361,7 +372,7 @@ tryRun('知らない名前のときは、誰の希望か確認してから取り
   sandbox.Store.save();
   setMode('manage');
   openTab('request');
-  byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードを貼り付けて取り込む') >= 0).click();
+  openImportPaste();
   byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA').value = code;
   byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && btnText(n) === '確認へ進む').click();
 
@@ -501,7 +512,8 @@ tryRun('開いていた説明は、作り直しても開いたまま', () => {
 tryRun('ファイル保存は <a> を本文に入れてから押す', () => {
   documentBody.children = [];
   openTab('shift');
-  findButton(byId['panel-shift'], 'CSV出力').click();
+  findButton(byId['panel-shift'], '配る・保存').click();
+  byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('CSVで書き出す') >= 0).click();
   const a = documentBody.children.find(n => n.tagName === 'A' && n.download);
   if (!a) throw new Error('<a> が本文に入っていない（Firefox などで保存されない）');
   if (!a._clicked) throw new Error('<a> が押されていない');

@@ -10,15 +10,17 @@
      input  … スタッフが自分の希望を入力する画面
      manage … 責任者がシフトを作る画面 */
   var mode = 'manage';
+  var modeChosen = false;      // 一度選んだら、上の切替は畳んでメニューに入れる
   try {
     if (typeof localStorage !== 'undefined') {
       var m0 = localStorage.getItem('shift-maker-mode');
-      if (m0 === 'input' || m0 === 'manage') mode = m0;
+      if (m0 === 'input' || m0 === 'manage') { mode = m0; modeChosen = true; }
     }
   } catch (err) { mode = 'manage'; }
 
   function setMode(next) {
     mode = next;
+    modeChosen = true;
     try { if (typeof localStorage !== 'undefined') localStorage.setItem('shift-maker-mode', next); } catch (e) { }
     render();
   }
@@ -303,6 +305,11 @@
 
   function openMenu() {
     var b = el('div', {}, [
+      menuSection('使う人', [
+        menuItem(mode === 'manage' ? 'スタッフ用の画面にする' : '責任者用の画面にする',
+          mode === 'manage' ? 'いまは責任者用（シフトを作る）' : 'いまはスタッフ用（希望を出す）',
+          function () { closeModal(); setMode(mode === 'manage' ? 'input' : 'manage'); })
+      ]),
       menuSection('使い方', [
         menuItem('はじめての方へ', '準備からシフト作成までの流れ', showHowToUse),
         menuItem('スタッフへの渡し方', '希望を集める手順', showHowToCollect),
@@ -317,6 +324,12 @@
           if (!confirm('サンプルの店（10名・1か月分の希望入り）を読み込みます。\n今の内容は上書きされます。よろしいですか？')) return;
           D = Store.loadDemo(); closeModal(); render();
           toast('サンプルを読み込みました');
+        }),
+        menuItem('この月のシフトを消す', '希望や登録はそのまま残ります', function () {
+          if (!confirm(D.settings.month + '月のシフトを消します。よろしいですか？（他の月は残ります）')) return;
+          var prefix = D.settings.year + '-' + U.pad(D.settings.month);
+          Object.keys(D.assignments).forEach(function (dt) { if (dt.indexOf(prefix) === 0) delete D.assignments[dt]; });
+          D.lastResult = null; closeModal(); saveAndRender(); toast(D.settings.month + '月のシフトを消しました');
         }),
         menuItem('全部消して最初から', '', function () {
           if (!confirm('すべてのデータを消して最初からにします。よろしいですか？')) return;
@@ -722,9 +735,8 @@
             switchTab('shift'); doGenerate();
           }
         }),
-        el('button', { class: 'btn ghost', text: '希望ファイルを読み込む', onclick: function () { document.getElementById('fileRequests').click(); } }),
-        el('button', { class: 'btn ghost', text: 'コードを貼り付けて取り込む', onclick: importCodeDialog }),
-        el('button', { class: 'btn ghost', text: 'スタッフへの渡し方', onclick: showHowToCollect })
+        iconBtn('download', '希望を取り込む', { class: 'btn ghost', onclick: importDialog }),
+        iconBtn('share', 'スタッフへの渡し方', { class: 'btn ghost', onclick: showHowToCollect })
       ]),
       el('div', { class: 'scroll' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['氏名', '入力状況', ''].map(function (h) { return el('th', { text: h }); }))]),
@@ -874,6 +886,18 @@
         }
       })
     ]);
+  }
+
+  /** 取り込み口をひとまとめにする（貼り付け／ファイル） */
+  function importDialog() {
+    var b = el('div', {}, [
+      el('p', { class: 'hint', text: 'スタッフから届いたものを、そのまま取り込みます。' }),
+      menuItem('送られてきた文を貼り付ける', 'LINEなどの文をそのまま貼ればOK', function () { closeModal(); importCodeDialog(); }, ''),
+      menuItem('ファイルから読み込む', '［ファイルに保存］で受け取った場合', function () {
+        closeModal(); document.getElementById('fileRequests').click();
+      })
+    ]);
+    modal('希望を取り込む', b, [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
   }
 
   function importCodeDialog() {
@@ -1204,26 +1228,14 @@
     var head = el('div', { class: 'row', style: 'margin-bottom:8px;align-items:center' }, [
       iconBtn('prev', '前月', { class: 'btn ghost sm', onclick: function () { moveMonth(-1); } }),
       el('strong', { style: 'font-size:16px', text: D.settings.year + '年 ' + D.settings.month + '月' }),
-      iconBtn('next', '翌月', { class: 'btn ghost sm', onclick: function () { moveMonth(1); } }),
-      el('span', { style: 'width:12px' }),
+      iconBtn('next', '翌月', { class: 'btn ghost sm', onclick: function () { moveMonth(1); } })
+    ]);
+    var act = el('div', { class: 'row', style: 'margin-bottom:12px' }, [
       el('button', { class: 'btn big', text: 'シフトを自動作成', onclick: doGenerate }),
-      el('button', {
-        class: 'btn ghost', text: 'この月を空にする', onclick: function () {
-          if (!confirm(D.settings.month + '月のシフトを消します。よろしいですか？（他の月は残ります）')) return;
-          var prefix = D.settings.year + '-' + U.pad(D.settings.month);
-          Object.keys(D.assignments).forEach(function (dt) { if (dt.indexOf(prefix) === 0) delete D.assignments[dt]; });
-          D.lastResult = null; saveAndRender();
-        }
-      }),
-      iconBtn('image', '画像で保存', { onclick: exportImage }),
-      iconBtn('download', 'CSV出力', { class: 'btn ghost', onclick: exportCsv }),
-      iconBtn('print', '印刷', {
-        class: 'btn ghost', onclick: function () {
-          if (typeof window !== 'undefined' && window.print) window.print();
-        }
-      })
+      iconBtn('share', '配る・保存', { class: 'btn ghost', onclick: exportDialog })
     ]);
     p.appendChild(head);
+    p.appendChild(act);
 
 
     /* 作成前チェック：作る前に分かる問題を先に出す */
@@ -1238,28 +1250,6 @@
         })));
     }
 
-    if (res) {
-      var hardN = res.violations.filter(function (v) { return v.level === 'hard'; }).length;
-      var softN = res.violations.length - hardN;
-      p.appendChild(card('作成結果', '', [
-        el('div', { class: 'grid2' }, [
-          stat('法令・必須違反', hardN + ' 件', hardN ? 'ng' : 'ok'),
-          stat('要調整（希望など）', softN + ' 件', softN ? 'warn' : 'ok'),
-          stat('人員不足の枠', res.unfilled.length + ' 件', res.unfilled.length ? 'warn' : 'ok'),
-          stat('概算人件費', U.yen(res.totalPay))
-        ]),
-        res.violations.length ? el('div', { style: 'margin-top:12px' }, res.violations.slice(0, 60).map(function (v) {
-          return el('div', { class: 'violation ' + (v.level === 'hard' ? 'hard' : '') }, [
-            el('div', { class: 'vt', text: v.msg }),
-            el('div', { class: 'vd', text: Rules.DEF_MAP[v.ruleId] ? Rules.DEF_MAP[v.ruleId].name : '' })
-          ]);
-        })) : el('p', { class: 'muted', text: 'ルール違反はありません。' }),
-        res.log && res.log.length ? el('div', { style: 'margin-top:8px' }, res.log.map(function (l) { return el('div', { class: 'vd', text: '・' + l }); })) : null
-      ]));
-    }
-
-    var zc = zeroDayCard();
-    if (zc) p.appendChild(zc);
 
     /* シフト表（人 × 日） */
     var thead = el('tr', {}, [el('th', { class: 'namecol', text: '氏名' })].concat(dates.map(function (d) {
@@ -1309,6 +1299,30 @@
     p.appendChild(card('シフト表', '人が足りない日（赤いマス）を押すと、誰が休み希望を出していて、誰がまだ希望を出していないかが分かります。', [
       rovingGrid(el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [thead]), el('tbody', {}, rows.concat(needRows))])]))
     ]));
+
+    /* 結果の要約は表のあと。まず表を見せる */
+    if (res) {
+      var hardN = res.violations.filter(function (v) { return v.level === 'hard'; }).length;
+      var softN = res.violations.length - hardN;
+      p.appendChild(card('作成結果', '', [
+        el('div', { class: 'grid2' }, [
+          stat('法令・必須違反', hardN + ' 件', hardN ? 'ng' : 'ok'),
+          stat('要調整（希望など）', softN + ' 件', softN ? 'warn' : 'ok'),
+          stat('人員不足の枠', res.unfilled.length + ' 件', res.unfilled.length ? 'warn' : 'ok'),
+          stat('概算人件費', U.yen(res.totalPay))
+        ]),
+        res.violations.length ? el('div', { style: 'margin-top:12px' }, res.violations.slice(0, 60).map(function (v) {
+          return el('div', { class: 'violation ' + (v.level === 'hard' ? 'hard' : '') }, [
+            el('div', { class: 'vt', text: v.msg }),
+            el('div', { class: 'vd', text: Rules.DEF_MAP[v.ruleId] ? Rules.DEF_MAP[v.ruleId].name : '' })
+          ]);
+        })) : el('p', { class: 'muted', text: 'ルール違反はありません。' }),
+        res.log && res.log.length ? el('div', { style: 'margin-top:8px' }, res.log.map(function (l) { return el('div', { class: 'vd', text: '・' + l }); })) : null
+      ]));
+    }
+    var zc = zeroDayCard();
+    if (zc) p.appendChild(zc);
+
   }
 
   /** 作成前に分かる問題を洗い出す */
@@ -1714,6 +1728,20 @@
     toast(hard === 0 ? 'シフトを作成しました（ルール違反なし）' : 'シフトを作成しました（要確認 ' + hard + ' 件）');
   }
 
+  /** 配る・保存。出口をひとまとめにして、シフト表を早く見せる */
+  function exportDialog() {
+    var b = el('div', {}, [
+      el('p', { class: 'hint', text: 'できたシフト表の渡し方を選んでください。' }),
+      menuItem('画像で保存', 'スマホでそのまま送れます', function () { closeModal(); exportImage(); }, ''),
+      menuItem('印刷', '休憩室に貼り出すとき', function () {
+        closeModal();
+        if (typeof window !== 'undefined' && window.print) window.print();
+      }),
+      menuItem('CSVで書き出す', '給与ソフトなどに取り込むとき', function () { closeModal(); exportCsv(); })
+    ]);
+    modal('配る・保存', b, [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
+  }
+
   function exportImage() {
     var hasShift = Store.monthDates().some(function (d) {
       return D.shiftTypes.some(function (st) { return Store.assignedOf(d, st.id).length > 0; });
@@ -2005,6 +2033,10 @@
     });
     var tabs = document.getElementById('tabs');
     if (tabs && tabs.style) tabs.style.display = isInput ? 'none' : '';
+
+    // 使う人の切替は、決まってしまえば毎回は使わない。画面の上を空ける
+    var modesEl2 = document.getElementById('modes');
+    if (modesEl2 && modesEl2.style) modesEl2.style.display = modeChosen ? 'none' : '';
 
     var inputPanel = document.getElementById('panel-input');
     if (inputPanel) inputPanel.classList.toggle('hidden', !isInput);

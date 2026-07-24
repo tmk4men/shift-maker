@@ -528,3 +528,6 @@ details.rule[open] summary::before{content:'▾ '}
 .ico{flex:none}
 .btn.icon-only{padding:0 8px;gap:0}
 .chip .btn.icon-only{border:none;background:none}
+
+/* ダイアログが開いているときは、お知らせがボタンに重ならないよう上に出す */
+.modal:not(.hidden) ~ .toast{bottom:auto;top:24px}
