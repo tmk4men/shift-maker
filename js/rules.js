@@ -19,7 +19,7 @@ var Rules = (function () {
     { id: 'LAW-060', cat: 'law', name: '有給・確定休の尊重', type: 'hard', lock: true, params: {}, desc: '有給申請日・絶対休の日は勤務にしない。' },
 
     // ---- 運用（設定変更可） ----
-    { id: 'OPS-001', cat: 'ops', name: '必要な人数をそろえる', type: 'hard', params: {}, desc: '各日・各勤務区分の必要人数を満たす。' },
+    { id: 'OPS-001', cat: 'ops', name: '必要な人数をそろえる', type: 'hard', params: {}, desc: 'その日・その勤務に決めた人数をそろえます。' },
     { id: 'OPS-A09', cat: 'ops', name: 'お店の休みの日', type: 'hard', params: {}, desc: '定休日・臨時休業日には誰も出勤させない。' },
     { id: 'OPS-003', cat: 'ops', name: '責任者の配置', type: 'hard', params: {}, desc: '責任者必須の勤務区分に責任者を1名以上。' },
     { id: 'OPS-004', cat: 'ops', name: '有資格者の配置', type: 'hard', params: {}, desc: '有資格者必須の勤務区分に有資格者を1名以上。' },
@@ -27,28 +27,28 @@ var Rules = (function () {
     { id: 'OPS-008', cat: 'ops', name: '担当できる勤務だけに入れる', type: 'hard', params: {}, desc: '本人ができない勤務区分には入れない。' },
     { id: 'OPS-A06', cat: 'ops', name: '同じ日に2つの勤務を入れない', type: 'hard', params: {}, desc: '1人が同じ日に複数の勤務区分へ重複して入らないようにする。' },
     { id: 'OPS-027', cat: 'ops', name: '勤務と勤務の間をあける', type: 'hard', weight: 0, params: { hours: 11 }, desc: '終業から次の始業まで一定時間を空ける。' },
-    { id: 'OPS-030', cat: 'ops', name: '休みの希望をかなえる', type: 'soft', weight: 8000, params: {}, desc: '「できれば休みたい」日は、なるべく出勤にしない。「絶対に休みたい」は別のルールで必ず守ります。' },
+    { id: 'OPS-030', cat: 'ops', name: '休みの希望をかなえる', type: 'hard', lock: true, params: {}, desc: '休みたいと出した日には出勤させません。' },
     { id: 'OPS-031', cat: 'ops', name: '出たい日の希望をかなえる', type: 'soft', weight: 3000, params: {}, desc: '「出たい」と申告した日を優先的に割り当てる。' },
-    { id: 'OPS-032', cat: 'ops', name: '勤務不可の曜日', type: 'hard', params: {}, desc: '通学・ダブルワーク等で出勤できない曜日を除外。' },
+    { id: 'OPS-032', cat: 'ops', name: '勤務不可の曜日', type: 'hard', params: {}, desc: '通学や掛け持ちの仕事などで出られない曜日には入れません。' },
     { id: 'OPS-033', cat: 'ops', name: '本人が出せる時間内におさめる', type: 'hard', params: {}, desc: 'スタッフが提出した「この日は何時から何時まで行けます」の範囲内にだけ割り当てる。' },
-    { id: 'OPS-034', cat: 'ops', name: '最低出勤日数・最低勤務時間', type: 'soft', weight: 500, params: {}, desc: '契約で保障している最低日数・最低時間に届くよう優先的に割り当てる。届かない場合は不足として報告する（休業手当の検討が必要になるため）。' },
+    { id: 'OPS-034', cat: 'ops', name: '最低出勤日数・最低勤務時間', type: 'soft', weight: 500, params: {}, desc: '契約で約束した最低の日数・時間に届くよう、優先して入れます。届かないときは不足としてお知らせします。' },
     { id: 'OPS-035', cat: 'ops', name: '最大出勤日数・上限時間', type: 'hard', params: {}, desc: '本人ごとの上限日数・上限時間を超えない。' },
     { id: 'OPS-036', cat: 'ops', name: '最大連勤日数', type: 'hard', params: {}, desc: '本人ごとの連勤上限を超えない。' },
-    { id: 'OPS-042', cat: 'ops', name: '年収の壁（扶養）', type: 'hard', weight: 1500, params: {}, desc: '年間上限額を超える割当を禁止し、使い切りペースを平準化する。' },
+    { id: 'OPS-042', cat: 'ops', name: '年収の壁（扶養）', type: 'hard', weight: 1500, params: {}, desc: '扶養の範囲を超えないようにし、年の途中で使い切らないようペースを配ります。' },
     { id: 'OPS-060', cat: 'ops', name: '夜勤明けの翌日は休み', type: 'hard', params: {}, desc: '日跨ぎ勤務の翌日は勤務を入れない。' },
     { id: 'OPS-064', cat: 'ops', name: '月間夜勤回数の上限', type: 'hard', params: {}, desc: '本人ごとの夜勤上限回数を超えない。' },
     { id: 'OPS-080', cat: 'ops', name: '夜勤の公平配分', type: 'soft', weight: 600, params: {}, desc: '夜勤回数が偏らないようにする。' },
     { id: 'OPS-081', cat: 'ops', name: '土日祝の公平配分', type: 'soft', weight: 400, params: {}, desc: '土日祝の出勤が偏らないようにする。' },
-    { id: 'OPS-084', cat: 'ops', name: '勤務時間の均等化', type: 'soft', weight: 1200, params: {}, desc: '契約上限に対する消化率を揃える。' },
-    { id: 'OPS-100', cat: 'ops', name: '組ませない人どうしを避ける', type: 'hard', params: {}, desc: '同じ勤務に入れない組み合わせ。' },
-    { id: 'OPS-101', cat: 'ops', name: '組ませたい人どうしを優先', type: 'soft', weight: 300, params: {}, desc: '一緒に組ませたい相手が同じ勤務にいれば加点。' },
-    { id: 'OPS-110', cat: 'ops', name: '人件費予算', type: 'soft', weight: 400, params: {}, desc: '予算を設定した場合、単価の高い人の過剰投入を抑える。' },
-    { id: 'OPS-A01', cat: 'ops', name: '人ごとのシフトの入りやすさ', type: 'soft', weight: 500, params: {}, desc: '「多めに入れたい／控えめにしたい」を反映（最低日数は下回らない）。' },
+    { id: 'OPS-084', cat: 'ops', name: '勤務時間の均等化', type: 'soft', weight: 1200, params: {}, desc: '一人だけ働きすぎ・少なすぎにならないよう、勤務時間をならします。' },
+    { id: 'OPS-100', cat: 'ops', name: '組ませない人どうしを避ける', type: 'hard', params: {}, desc: '同じ勤務に入れたくない人どうしを、一緒にしません。' },
+    { id: 'OPS-101', cat: 'ops', name: '組ませたい人どうしを優先', type: 'soft', weight: 300, params: {}, desc: '一緒に組ませたい相手がいる勤務を、なるべく選びます。' },
+    { id: 'OPS-110', cat: 'ops', name: '人件費予算', type: 'soft', weight: 400, params: {}, desc: '予算を入れているとき、時給の高い人の出番が増えすぎないようにします。' },
+    { id: 'OPS-A01', cat: 'ops', name: '人ごとのシフトの入りやすさ', type: 'soft', weight: 500, params: {}, desc: '「多めに入れたい／控えめにしたい」を反映します。最低出勤日数は必ず守ります。' },
     { id: 'OPS-A02', cat: 'ops', name: '連勤の抑制', type: 'soft', weight: 150, params: {}, desc: '連勤が長くなるほど避ける。' },
     { id: 'OPS-A03', cat: 'ops', name: '教育ペアの優先', type: 'soft', weight: 800, params: {}, desc: '新人と担当トレーナーを同じ勤務に寄せる。' },
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者を使いすぎない', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
     { id: 'OPS-A05', cat: 'ops', name: '月のはじめと終わりで偏らせない', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' },
-    { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '本人ごとに週の上限時間を設ける。社会保険は2026年10月から「週20時間以上」が加入の分かれ目になるため、加入したくない人の調整に使う。' }
+    { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の勤務時間の上限を決められます。' }
   ];
 
   var DEF_MAP = {};
@@ -257,10 +257,11 @@ var Rules = (function () {
       }
     }
 
-    // 希望（絶対休・有給）
+    // 休みの希望はすべて通す（設定では外せない）
     var req = Store.requestOf(empId, date);
     if (req === 'must') ng('LAW-060', '絶対休（確定休）です');
     if (req === 'paid') ng('LAW-060', '有給休暇の申請日です');
+    if (req === 'off') ng('OPS-030', '休み希望を出しています');
 
     // 18歳未満（時間外は一切不可）
     if (e.minor) {
@@ -381,7 +382,6 @@ var Rules = (function () {
 
     // 希望休 / 出勤希望
     var req = Store.requestOf(empId, date);
-    if (req === 'off') add(cfg(data, 'OPS-030').weight, 'OPS-030', '希望休の日');
     if (req === 'want') add(-cfg(data, 'OPS-031').weight, 'OPS-031', '出勤希望の日');
 
     // 個人の優遇度（-3〜+3）
@@ -537,7 +537,7 @@ var Rules = (function () {
             return;
           }
           var req = Store.requestOf(id, date);
-          if (req === 'off') push('soft', 'OPS-030', date + '：' + e.name + 'さんの希望休に出勤が入っています', date, st.id, id);
+          if (req === 'off') push('hard', 'OPS-030', date + '：' + e.name + 'さんの休み希望の日に出勤が入っています', date, st.id, id);
 
           // 既存の割当を1件ずつ外してハード制約を全部かけ直す
           // （手動編集・JSON読み込み・古い保存データで違反が紛れ込むのを防ぐ）

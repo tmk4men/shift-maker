@@ -218,7 +218,7 @@ tryRun('［シフトを作成する］を押す', () => {
 tryRun('ルールの調整は「準備」タブの中にある', () => {
   openTab('setup');
   const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
-  if (txt.indexOf('細かく決める') < 0) throw new Error('ルールの調整が準備タブにない');
+  if (txt.indexOf('詳細設定') < 0) throw new Error('ルールの調整が準備タブにない');
   const inp = byId['panel-setup'].all().find(n => n.tagName === 'INPUT' && n.attrs.type === 'number' && String(n.attrs.step) === '100');
   if (!inp) throw new Error('優先度の入力欄が見つからない');
   inp.value = '999';
@@ -307,12 +307,14 @@ tryRun('スタッフが入力 → コード化 → 責任者が取り込む', ()
   nameInput.fire('input', { target: nameInput });
   const allOk = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('全部「終日OK」') >= 0);
   allOk.click();
-  const codeBtn = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('コードでコピー') >= 0);
+  const codeBtn = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('コードをコピー') >= 0);
   codeBtn.click();
   const ta = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
   if (!ta) throw new Error('コード欄がない。alert=' + JSON.stringify(alerted.slice(-2)));
-  if (ta.value.indexOf('SHIFT1:') !== 0) throw new Error('形式が違う: ' + String(ta.value).slice(0, 20));
-  const code = ta.value;
+  if (ta.value.indexOf('田中 店長') < 0) throw new Error('文面に名前がない: ' + String(ta.value).slice(0, 30));
+  if (ta.value.indexOf('SHIFT1:') < 0) throw new Error('文面にコードがない: ' + String(ta.value).slice(0, 30));
+  // LINEで転送されたときのように、前後に余計な行が付いた状態で渡す
+  const code = '2026/07/24 21:03\n' + ta.value + '\nよろしくお願いします';
 
   // 責任者側：対象月をスタッフの入力に合わせてから取り込む
   const draft = JSON.parse(store['shift-input-draft'] || '{}');
@@ -363,19 +365,43 @@ tryRun('ルールの画面に、内部の記号や変更できない法令を出
   ['ハード', 'ソフト', '重み'].forEach(w => {
     if (txt.indexOf(w) >= 0) throw new Error('専門用語が残っている: ' + w);
   });
-  if (txt.indexOf('休みの希望をかなえる') < 0) throw new Error('調整できる運用ルールまで消えている');
+  if (txt.indexOf('夜勤の公平配分') < 0) throw new Error('調整できる運用ルールまで消えている');
+  if (txt.indexOf('休みの希望をかなえる') >= 0) throw new Error('休みの希望は必ず通すので、設定に出してはいけない');
   if (txt.indexOf('1日8時間') >= 0) throw new Error('変更できない法令ルールが設定欄に出ている');
 });
 
-tryRun('シフトの方針は畳まずに出す（ふつうはここだけ触ればよい）', () => {
+tryRun('休み希望は最初から必ず通す（設定で弱められない）', () => {
+  sandbox.Store.loadDemo();
+  const d = sandbox.Store.get();
+  const emp = d.employees[0];
+  const day = sandbox.Store.monthDates()[10];
+
+  // 全日OKにしたうえで、その日だけ「できれば休みたい」を出す
+  d.avail[emp.id] = {};
+  sandbox.Store.monthDates().forEach(x => { d.avail[emp.id][x] = { allday: true }; });
+  d.requests[emp.id] = {}; d.requests[emp.id][day] = 'off';
+  sandbox.Store.save();
+
+  const res = sandbox.Solver.generate(sandbox.Store.get());
+  const inThatDay = Object.keys(res.assignments[day] || {})
+    .some(stId => (res.assignments[day][stId] || []).indexOf(emp.id) >= 0);
+  if (inThatDay) throw new Error(emp.name + 'さんの休み希望の日に出勤が入っている');
+
+  // 方針の選択そのものを廃止した
   openTab('setup');
   const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
-  ['シフトの方針', 'バランス重視', '希望を通したい', '公平にしたい', '人件費を抑えたい']
-    .forEach(t => { if (txt.indexOf(t) < 0) throw new Error('方針の選択に「' + t + '」がない'); });
+  if (txt.indexOf('シフトの方針') >= 0) throw new Error('廃止した「シフトの方針」が残っている');
+  if (txt.indexOf('人件費予算') >= 0) throw new Error('外した人件費予算の設定が残っている');
+});
 
-  const b = findButton(byId['panel-setup'], '公平にしたい');
+tryRun('アプリのURLはどこにも出さない', () => {
+  byId['btnMenu'].click();
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === 'スタッフへの渡し方');
   b.click();
-  if (sandbox.Store.get().settings.policy !== 'fair') throw new Error('選んだ方針が保存されない');
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ')
+    + byId['modalBody'].all().map(n => n.value || '').join(' ')
+    + byId['modalFoot'].all().map(n => n._text || '').join(' ');
+  if (/https?:\/\/|github|アプリのURL|URLをコピー/.test(txt)) throw new Error('URLが表示されている: ' + txt.slice(0, 80));
 });
 
 tryRun('シフトを作る前に「0日の人」を並べない', () => {
@@ -474,6 +500,43 @@ tryRun('使う人の切り替えは、余白を押しても落ちない', () => 
   const before = store['shift-maker-mode'];
   (byId['modes']._listeners.click || []).forEach(f => f({ target: stray }));
   if (store['shift-maker-mode'] !== before) throw new Error('余白を押しただけでモードが変わった');
+});
+
+tryRun('手順ガイドは、押すと「いまここ」が動く', () => {
+  sandbox.Store.loadDemo();
+  openTab('setup');
+  const steps = () => byId['panel-setup'].all()
+    .filter(n => n.tagName === 'BUTTON' && String(n.className).indexOf('guide-step') >= 0);
+  const here = () => steps().filter(n => String(n.className).indexOf('current') >= 0)
+    .map(n => n.all().map(x => x._text || '').join(''));
+  if (here().length !== 1) throw new Error('「いまここ」が1つでない: ' + JSON.stringify(here()));
+  if (here()[0].indexOf('店の設定') < 0) throw new Error('準備タブなのに店の設定が「いまここ」でない');
+
+  const staffStep = steps().find(n => n.all().some(x => (x._text || '').indexOf('スタッフ登録') >= 0));
+  staffStep.click();
+  const now = byId['panel-staff'].all()
+    .filter(n => n.tagName === 'BUTTON' && String(n.className).indexOf('current') >= 0)
+    .map(n => n.all().map(x => x._text || '').join(''));
+  if (!now.length || now[0].indexOf('スタッフ登録') < 0)
+    throw new Error('押しても「いまここ」が動かない: ' + JSON.stringify(now));
+});
+
+tryRun('すでに開いている画面に対して［開く］を出さない', () => {
+  sandbox.Store.reset();          // まっさら＝次にやることは「準備」
+  openTab('setup');
+  const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('この画面で：') < 0)
+    throw new Error('同じ画面なのに案内が「次にやること」のまま');
+  const guideBtn = byId['panel-setup'].all().find(n =>
+    n.tagName === 'BUTTON' && (n._text || '') === '開く');
+  if (guideBtn) throw new Error('押しても何も起きない［開く］が出ている');
+
+  // 別のタブへ行けば［開く］は出る
+  openTab('summary');
+  const b2 = byId['panel-summary'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === '開く');
+  if (!b2) throw new Error('別の画面では［開く］が必要');
+  b2.click();
+  sandbox.Store.loadDemo();
 });
 
 /* ---------- マウスがなくても操作できるか ---------- */

@@ -250,11 +250,11 @@
         menuItem('このアプリの決まり', '変更できない動きの説明', showFixedRules)
       ]),
       menuSection('データ', [
-        menuItem('書き出し（バックアップ）', 'ファイルに保存します', function () { closeModal(); Store.exportJson(); }),
+        menuItem('バックアップを保存', 'ファイルに書き出します', function () { closeModal(); Store.exportJson(); }),
         menuItem('読み込み', '書き出したファイルを戻します', function () {
           closeModal(); document.getElementById('fileImport').click();
         }),
-        menuItem('サンプルの店を読み込む', '動きを見たいとき（今の内容は消えます）', function () {
+        menuItem('サンプルの店を読み込む', '今の内容は消えます', function () {
           if (!confirm('サンプルの店（10名・1か月分の希望入り）を読み込みます。\n今の内容は上書きされます。よろしいですか？')) return;
           D = Store.loadDemo(); closeModal(); render();
           toast('サンプルを読み込みました');
@@ -333,25 +333,38 @@
     var st = steps();
     var next = st.filter(function (s) { return !s.done; })[0];
 
-    var strip = el('div', { class: 'guide' }, st.map(function (s, i) {
-      var state = s.done ? 'done' : (next && next.n === s.n ? 'now' : '');
-      return el('button', {
+    var strip = el('div', { class: 'guide' }, st.map(function (s) {
+      // done/now は「進み具合」、current は「いま開いている場所」。
+      // 押しても見た目が変わらないと、反応していないように見えるため両方を出す。
+      var here = (s.tab === currentTab);
+      var state = (s.done ? 'done' : (next && next.n === s.n ? 'now' : '')) + (here ? ' current' : '');
+      var b = el('button', {
         class: 'guide-step ' + state, onclick: function () { switchTab(s.tab); },
         title: s.todo
       }, [
         el('span', { class: 'guide-n', text: s.done ? '✓' : String(s.n) }),
         el('span', { text: s.label })
       ]);
+      if (here) b.setAttribute('aria-current', 'step');
+      return b;
     }));
 
-    var msg = next
-      ? el('div', { class: 'guide-next' }, [
+    var msg;
+    if (!next) {
+      msg = el('div', { class: 'guide-next done' }, [
+        el('span', { text: 'シフトができました。「4. シフト表」で内容を確認できます。' })
+      ]);
+    } else if (next.tab === currentTab) {
+      // すでにその画面にいる。ここで［開く］を出しても押した先が同じ場所で、何も起きない
+      msg = el('div', { class: 'guide-next' }, [
+        el('span', { text: 'この画面で：' + next.todo })
+      ]);
+    } else {
+      msg = el('div', { class: 'guide-next' }, [
         el('span', { text: '次にやること：' + next.todo }),
         el('button', { class: 'btn sm', text: '開く', onclick: function () { switchTab(next.tab); } })
-      ])
-      : el('div', { class: 'guide-next done' }, [
-        el('span', { text: 'シフトができました。④で内容を確認し、③のスタッフ用リンクで共有できます。' })
       ]);
+    }
 
     return el('div', { class: 'guide-wrap' }, [strip, msg]);
   }
@@ -381,15 +394,12 @@
         field('年', liveInput('number', s.year, function (v) { s.year = U.num(v, 2000, 2100, s.year); }, { min: 2000, max: 2100 })),
         field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return { v: m, t: m + '月' }; }), s.month,
           function (e) { s.month = +e.target.value; saveAndRender(); })),
-        field('週の始まり', select([{ v: 0, t: '日曜' }, { v: 1, t: '月曜' }], s.weekStartsOn, function (e) { s.weekStartsOn = +e.target.value; saveAndRender(); })),
-        field('人件費予算（0=なし）', input('number', s.budget, function (e) { s.budget = U.num(e.target.value, 0, 1e12, 0); Store.save(); }, { step: 10000, min: 0 }))
+        field('週の始まり', select([{ v: 0, t: '日曜' }, { v: 1, t: '月曜' }], s.weekStartsOn, function (e) { s.weekStartsOn = +e.target.value; saveAndRender(); }))
       ]),
-      el('p', { class: 'hint', style: 'margin-top:10px', text:
-        '祝日は自動判定します。希望が入力されていない日は出勤させません。必要人数を超える配置もしません。' })
     ]));
 
     /* お店の休み */
-    var closedCard = card('お店の休み', '休みの日には誰も出勤させません。必要人数の設定より優先されます。', [
+    var closedCard = card('お店の休み', 'ここで決めた日は、誰も出勤しません。', [
       el('div', { class: 'field' }, [el('label', { text: '定休日（毎週この曜日は休み）' }),
       el('div', { class: 'row' }, U.WD.map(function (w, i) {
         return checkbox(w + '曜', (s.closedWeekdays || []).indexOf(i) >= 0, function (e) {
@@ -602,23 +612,19 @@
       field('最低出勤日数', input('number', e.minDays, function (ev) { e.minDays = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('最大出勤日数', input('number', e.maxDays, function (ev) { e.maxDays = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('連勤上限', input('number', e.maxConsecutive, function (ev) { e.maxConsecutive = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
-      field('月間の最低時間(0=なし)', input('number', e.minHoursMonth, function (ev) { e.minHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
-      field('月間の上限時間(0=なし)', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
-      field('月間夜勤上限(0=なし)', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
-      field('週の上限時間(0=なし)', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
+      field('月の最低時間（0＝なし）', input('number', e.minHoursMonth, function (ev) { e.minHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
+      field('月の上限時間（0＝なし）', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
+      field('月の夜勤上限（0＝なし）', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
+      field('週の上限時間（0＝なし）', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
       field('シフトの入りやすさ', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
         return { v: v, t: v > 0 ? '+' + v + '（多めに）' : v < 0 ? v + '（控えめに）' : '0（標準）' };
       }), e.priority, function (ev) { e.priority = +ev.target.value; }))
     ]));
 
-    b.appendChild(el('p', { class: 'hint', style: 'margin-top:6px', text:
-      '※ 最低日数・最低時間は契約で保障している下限。届かない場合は不足として報告します。' }));
-    b.appendChild(el('p', { class: 'hint', text:
-      '※ 週の上限時間は社会保険の調整用。2026年10月から週20時間以上が加入の分かれ目になります。' }));
 
     b.appendChild(el('h4', { text: '年収の壁（扶養内で働きたい人）', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, [
-      field('年収上限（0=設定しない）', input('number', e.incomeCap, function (ev) { e.incomeCap = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 })),
+      field('年収上限（0＝なし）', input('number', e.incomeCap, function (ev) { e.incomeCap = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 })),
       field('年初からの累計賃金', input('number', e.ytdEarnings, function (ev) { e.ytdEarnings = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 }))
     ]));
 
@@ -729,10 +735,10 @@
       })));
     });
 
-    p.appendChild(card('希望一覧（責任者が直接編集も可）', 'クリックで切り替わります。表の中は矢印キーでも動けます。', [
+    p.appendChild(card('希望一覧', 'マスを押すと切り替わります。矢印キーでも動けます。', [
       el('div', { class: 'legend' }, [
-        el('span', { class: 'req-off', text: '△ 休み希望（できれば）' }),
-        el('span', { class: 'req-must', text: '× 絶対休' }),
+        el('span', { class: 'req-off', text: '△ 休みたい' }),
+        el('span', { class: 'req-must', text: '× 絶対に休みたい' }),
         el('span', { class: 'req-paid', text: '有 有給' }),
         el('span', { class: 'req-want', text: '◎ 出勤希望' })
       ]),
@@ -742,26 +748,15 @@
 
   /** スタッフにどう入力してもらうかの案内 */
   function showHowToCollect() {
-    var url = '';
-    try { url = (typeof location !== 'undefined') ? (location.origin + location.pathname) : ''; } catch (e) { url = ''; }
-    var ta = url ? el('textarea', { readonly: 'readonly', style: 'width:100%;height:56px;font-family:monospace;font-size:12px' }) : null;
-    if (ta) ta.value = url;
-
     modal('スタッフへの渡し方', el('div', {}, [
       el('p', {}, [el('strong', { text: 'スタッフにやってもらうこと' })]),
       el('p', { class: 'hint', text: '1. このアプリを開く' }),
       el('p', { class: 'hint', text: '2. 上の［シフト希望を出す］を押す' }),
       el('p', { class: 'hint', text: '3. 名前と、行ける日・時間を入れる' }),
-      el('p', { class: 'hint', text: '4. ［ファイルに保存］か［コードでコピー］' }),
-      el('p', { class: 'hint', text: '5. できたものをLINEなどで責任者に送る' }),
+      el('p', { class: 'hint', text: '4. ［LINEなどで送る］を押して、責任者に送る' }),
       el('p', { style: 'margin-top:16px' }, [el('strong', { text: '責任者がやること' })]),
-      el('p', { class: 'hint', text: '受け取ったファイルを［希望ファイルを読み込む］、コードなら［コードを貼り付けて取り込む］。何人分でも一度に取り込めます。' })
-    ].concat(ta ? [el('p', { style: 'margin-top:16px' }, [el('strong', { text: 'アプリのURL' })]), ta] : [])), [
-      ta ? el('button', {
-        class: 'btn', text: 'URLをコピー', onclick: function () { copyText(url, ta); }
-      }) : null,
-      el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })
-    ].filter(Boolean));
+      el('p', { class: 'hint', text: '送られてきた文をコピーして、［コードを貼り付けて取り込む］に貼るだけです。名前や日時ごと貼っても大丈夫です。何人分でも一度に取り込めます。' })
+    ]), [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
   }
 
   /** 希望ファイルをまとめて読み、誰のものかを確認してから取り込む */
@@ -859,9 +854,12 @@
     modal('コードの取り込み', el('div', {}, [msg, ta]), [
       el('button', {
         class: 'btn', text: '確認へ進む', onclick: function () {
-          // 改行区切りで複数貼られても拾えるようにする
-          var chunks = String(ta.value || '').split(/\s*\n\s*\n\s*|\s*\n(?=SHIFT[01]:)/)
-            .map(function (x) { return x.trim(); }).filter(Boolean);
+          // LINE から名前や日時ごと貼り付けられても、コードの部分だけ拾う
+          var raw = String(ta.value || '');
+          var tokens = raw.match(/SHIFT1:[A-Za-z0-9+/=]+/g) || [];
+          var chunks = tokens.length ? tokens
+            : raw.split(/\s*\n\s*\n\s*|\s*\n(?=SHIFT[01]:)/)
+              .map(function (x) { return x.trim(); }).filter(Boolean);
           if (!chunks.length) { msg.textContent = 'コードが入力されていません'; return; }
           var items = [], ng = [];
           chunks.forEach(function (c, i) {
@@ -905,55 +903,138 @@
     });
   }
 
+  /* ================= 希望入力のカレンダー =================
+     31行の表は埋めるのが苦痛なので、カレンダーで見て、日を押して入力する。
+     cfg: { year, month, getAvail(date), setAvail(date,obj), getReq(date), setReq(date,v), after() } */
+
+  var AVAIL_LABEL = { '': '未入力', allday: '終日OK', time: '時間', off: '行けない' };
+  var REQ_MARK = { '': '', off: '△', must: '×', paid: '有', want: '◎' };
+
+  function availMode(av) { return !av ? '' : av.off ? 'off' : av.allday ? 'allday' : 'time'; }
+
+  function requestCalendar(cfg) {
+    var dates = U.monthDates(cfg.year, cfg.month);
+    var start = (D.settings && D.settings.weekStartsOn) || 0;
+    var order = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return (start + i) % 7; });
+
+    var head = el('div', { class: 'cal-head' }, order.map(function (w) {
+      return el('div', { class: w === 0 ? 'sun' : w === 6 ? 'sat' : '', text: U.WD[w] });
+    }));
+
+    var cells = [];
+    var lead = (U.weekdayOf(dates[0]) - start + 7) % 7;
+    for (var i = 0; i < lead; i++) cells.push(el('div', { class: 'cal-day blank' }));
+
+    dates.forEach(function (d) {
+      var w = U.weekdayOf(d);
+      var hol = Store.holidayName(d);
+      var av = cfg.getAvail(d);
+      var m = availMode(av);
+      var req = cfg.getReq(d);
+
+      var state = m === '' ? 'none' : m === 'off' ? 'no' : 'yes';
+      var sub = m === 'time' ? (av.from + '〜') : AVAIL_LABEL[m];
+
+      var b = el('button', {
+        class: 'cal-day ' + state + (w === 0 || hol ? ' sun' : w === 6 ? ' sat' : ''),
+        title: d + (hol ? '（' + hol + '）' : ''),
+        onclick: function () { dayBox(cfg, d); }
+      }, [
+        el('span', { class: 'd', text: String(+d.slice(8)) }),
+        el('span', { class: 's', text: sub }),
+        req ? el('span', { class: 'm ' + REQ_CLASS[req], text: REQ_MARK[req] }) : null
+      ]);
+      b.setAttribute('aria-label',
+        (+d.slice(5, 7)) + '月' + (+d.slice(8)) + '日 ' + AVAIL_LABEL[m]
+        + (req ? ' ' + REQ_NAME[req] : '') + '（押すと入力できます）');
+      cells.push(b);
+    });
+
+    return el('div', {}, [head, el('div', { class: 'cal' }, cells)]);
+  }
+
+  /** 日を押したときに開く入力ボックス */
+  function dayBox(cfg, date) {
+    var w = U.WD[U.weekdayOf(date)];
+    var hol = Store.holidayName(date);
+    var title = (+date.slice(5, 7)) + '月' + (+date.slice(8)) + '日（' + w + '）' + (hol ? ' ' + hol : '');
+
+    function redraw() { cfg.after(); dayBox(cfg, date); }
+
+    var av = cfg.getAvail(date);
+    var m = availMode(av);
+    var from = (av && av.from) || '09:00';
+    var to = (av && av.to) || '18:00';
+
+    var b = el('div', {}, []);
+
+    b.appendChild(el('h4', { text: 'この日は出勤できますか？' }));
+    b.appendChild(el('div', { class: 'pick' }, [
+      { v: 'allday', t: '終日OK' }, { v: 'time', t: '時間を指定' },
+      { v: 'off', t: '行けない' }, { v: '', t: '未入力' }
+    ].map(function (o) {
+      return el('button', {
+        class: 'btn ' + (m === o.v ? '' : 'ghost'), text: o.t,
+        onclick: function () {
+          if (o.v === '') cfg.setAvail(date, null);
+          else if (o.v === 'allday') cfg.setAvail(date, { allday: true });
+          else if (o.v === 'off') cfg.setAvail(date, { off: true });
+          else cfg.setAvail(date, { from: from, to: to });
+          redraw();
+        }
+      });
+    })));
+
+    if (m === 'time') {
+      var fromI = input('time', from, null, { onchange: function (ev) {
+        if (U.isTime(ev.target.value)) { cfg.setAvail(date, { from: ev.target.value, to: to }); redraw(); }
+      } });
+      var toI = input('time', to, null, { onchange: function (ev) {
+        if (U.isTime(ev.target.value)) { cfg.setAvail(date, { from: from, to: ev.target.value }); redraw(); }
+      } });
+      b.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [
+        field('何時から', fromI), field('何時まで', toI)
+      ]));
+    }
+
+    var req = cfg.getReq(date);
+    b.appendChild(el('h4', { text: '希望はありますか？', style: 'margin-top:20px' }));
+    b.appendChild(el('div', { class: 'pick' }, [
+      { v: '', t: 'とくになし' }, { v: 'off', t: '休みたい' }, { v: 'must', t: '絶対に休みたい' },
+      { v: 'paid', t: '有給を使いたい' }, { v: 'want', t: 'ぜひ入りたい' }
+    ].map(function (o) {
+      return el('button', {
+        class: 'btn ' + (req === o.v ? '' : 'ghost'), text: o.t,
+        onclick: function () { cfg.setReq(date, o.v); redraw(); }
+      });
+    })));
+
+    var idx = U.monthDates(cfg.year, cfg.month).indexOf(date);
+    var all = U.monthDates(cfg.year, cfg.month);
+    var foot = [];
+    if (idx > 0) foot.push(el('button', { class: 'btn ghost', text: '◀ 前の日', onclick: function () { cfg.after(); dayBox(cfg, all[idx - 1]); } }));
+    if (idx < all.length - 1) foot.push(el('button', { class: 'btn ghost', text: '次の日 ▶', onclick: function () { cfg.after(); dayBox(cfg, all[idx + 1]); } }));
+    foot.push(el('button', { class: 'btn', text: '閉じる', onclick: function () { cfg.after(); closeModal(); } }));
+
+    modal(title, b, foot);
+  }
+
   function staffSubmitCard(e, dates) {
     var locked = false;
 
-    var rows = dates.map(function (d) {
-      var w = U.weekdayOf(d);
-      var av = D.avail[e.id] && D.avail[e.id][d] ? D.avail[e.id][d] : null;
-      var mode = !av ? '' : av.off ? 'off' : av.allday ? 'allday' : 'time';
-      var req = Store.requestOf(e.id, d);
-
-      var fromI = input('time', av && av.from ? av.from : '09:00', function (ev) {
-        if (!U.isTime(ev.target.value)) return;
-        var cur = D.avail[e.id][d]; cur.from = ev.target.value; Store.save();
-      });
-      var toI = input('time', av && av.to ? av.to : '18:00', function (ev) {
-        if (!U.isTime(ev.target.value)) return;
-        var cur = D.avail[e.id][d]; cur.to = ev.target.value; Store.save();
-      });
-      if (mode !== 'time' || locked) { fromI.disabled = true; toI.disabled = true; }
-
-      var sel = select([
-        { v: '', t: '未入力' }, { v: 'allday', t: '終日OK' }, { v: 'time', t: '時間を指定' }, { v: 'off', t: '行けない' }
-      ], mode, function (ev) {
-        var v = ev.target.value;
+    var cal = requestCalendar({
+      year: D.settings.year, month: D.settings.month,
+      getAvail: function (d) { return (D.avail[e.id] && D.avail[e.id][d]) || null; },
+      setAvail: function (d, v) {
         if (!D.avail[e.id]) D.avail[e.id] = {};
-        if (v === '') delete D.avail[e.id][d];
-        else if (v === 'allday') D.avail[e.id][d] = { allday: true };
-        else if (v === 'off') D.avail[e.id][d] = { off: true };
-        else D.avail[e.id][d] = { from: fromI.value, to: toI.value };
-        Store.save(); render();
-      });
-      sel.disabled = locked;
-
-      var reqSel = select([
-        { v: '', t: '希望なし' }, { v: 'off', t: 'できれば休みたい' }, { v: 'must', t: '絶対に休みたい' },
-        { v: 'paid', t: '有給を使いたい' }, { v: 'want', t: 'ぜひ入りたい' }
-      ], req, function (ev) {
+        if (v === null) delete D.avail[e.id][d]; else D.avail[e.id][d] = v;
+      },
+      getReq: function (d) { return Store.requestOf(e.id, d); },
+      setReq: function (d, v) {
         if (!D.requests[e.id]) D.requests[e.id] = {};
-        if (ev.target.value === '') delete D.requests[e.id][d]; else D.requests[e.id][d] = ev.target.value;
-        Store.save(); render();
-      });
-      reqSel.disabled = locked;
-
-      return el('tr', { class: 'day-row' }, [
-        el('td', { class: 'daycell ' + (w === 0 ? 'sun' : w === 6 ? 'sat' : ''), 'data-label': '日付', text: d.slice(5) + '（' + U.WD[w] + '）' }),
-        el('td', { 'data-label': '出勤できる？' }, [sel]),
-        el('td', { 'data-label': '何時から' }, [fromI]),
-        el('td', { 'data-label': '何時まで' }, [toI]),
-        el('td', { 'data-label': '希望' }, [reqSel])
-      ]);
+        if (v === '') delete D.requests[e.id][d]; else D.requests[e.id][d] = v;
+      },
+      after: function () { Store.save(); render(); }
     });
 
     var bulk = el('div', { class: 'row', style: 'margin-bottom:10px' }, locked ? [] : [
@@ -1026,10 +1107,7 @@
         el('span', { class: 'badge ' + (doneCount === dates.length ? 'ok' : 'warn'), text: '入力 ' + doneCount + ' / ' + dates.length + ' 日' })
       ]),
       bulk,
-      el('div', { class: 'scroll staff-table', style: 'max-height:60vh' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['日付', '出勤できる？', '何時から', '何時まで', '希望'].map(function (h) { return el('th', { text: h }); }))]),
-        el('tbody', {}, rows)
-      ])]),
+      cal,
       el('div', { class: 'row', style: 'margin-top:12px' }, foot)
     ]);
     box.id = 'staffSubmit';
@@ -1093,11 +1171,6 @@
     ]);
     p.appendChild(head);
 
-    var prevPrefix = U.addDays(D.settings.year + '-' + U.pad(D.settings.month) + '-01', -1).slice(0, 7);
-    var hasPrev = Object.keys(D.assignments).some(function (dt) { return dt.indexOf(prevPrefix) === 0; });
-    p.appendChild(el('p', { class: 'hint', style: 'margin:-4px 0 10px', text: hasPrev
-      ? '前月（' + prevPrefix + '）のシフトも保存されています。月をまたぐ連勤・夜勤明け・夜勤/土日の公平性に自動で反映されます。'
-      : '前月のシフトがまだありません。前月を作っておくと、月をまたぐ連勤や夜勤の偏りも調整されます。' }));
 
     /* 作成前チェック：作る前に分かる問題を先に出す */
     var pre = preflight();
@@ -1119,7 +1192,7 @@
           stat('法令・必須違反', hardN + ' 件', hardN ? 'ng' : 'ok'),
           stat('要調整（希望など）', softN + ' 件', softN ? 'warn' : 'ok'),
           stat('人員不足の枠', res.unfilled.length + ' 件', res.unfilled.length ? 'warn' : 'ok'),
-          stat('概算人件費', U.yen(res.totalPay), D.settings.budget > 0 && res.totalPay > D.settings.budget ? 'warn' : 'ok')
+          stat('概算人件費', U.yen(res.totalPay))
         ]),
         res.violations.length ? el('div', { style: 'margin-top:12px' }, res.violations.slice(0, 60).map(function (v) {
           return el('div', { class: 'violation ' + (v.level === 'hard' ? 'hard' : '') }, [
@@ -1162,20 +1235,24 @@
         .concat([el('td', { class: 'right', text: String(days) }), el('td', { class: 'right', text: U.min2h(mins) })]));
     });
 
-    /* 日別の充足状況 */
+    /* 日別の人数。足りない枠は押すと理由が見られる */
     var needRows = D.shiftTypes.map(function (st) {
       return el('tr', {}, [el('td', { class: 'namecol', text: st.name + ' の人数' })].concat(dates.map(function (d) {
         var need = Store.needOf(d, st.id), got = Store.assignedOf(d, st.id).length;
         if (need === 0 && got === 0) return el('td', { class: 'cell-shift empty', text: '' });
         var okc = got >= need;
-        return el('td', {
+        var td = el('td', {
           class: 'cell-shift', text: got + '/' + need,
           style: okc ? 'color:var(--ok)' : 'color:#fff;background:var(--ng)'
         });
+        return makeActivatable(td,
+          st.name + ' ' + d.slice(5) + ' ' + got + '人 / 必要' + need + '人'
+            + (okc ? '' : '（押すと足りない理由が見られます）'),
+          function () { shortageDialog(d, st.id); });
       })).concat([el('td', {}), el('td', {})]));
     });
 
-    p.appendChild(card('シフト表', 'セルをクリックすると、勤務の変更と「急に休むときの代わりさがし」ができます。表の中は矢印キーでも動けます。', [
+    p.appendChild(card('シフト表', '人が足りない日（赤いマス）を押すと、誰が休み希望を出していて、誰がまだ希望を出していないかが分かります。', [
       rovingGrid(el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [thead]), el('tbody', {}, rows.concat(needRows))])]))
     ]));
   }
@@ -1392,6 +1469,71 @@
     modal('勤務の変更', b, [el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal })]);
   }
 
+  /** 足りない枠を押したとき：なぜ埋まらないのかを、人の名前で見せる */
+  function shortageDialog(date, stId) {
+    var st = Store.stById(stId);
+    var need = Store.needOf(date, stId);
+    var inShift = Store.assignedOf(date, stId).map(function (id) { return Store.empById(id); }).filter(Boolean);
+    var w = U.WD[U.weekdayOf(date)];
+    var head = (+date.slice(5, 7)) + '月' + (+date.slice(8)) + '日（' + w + '）' + st.name;
+
+    var wantOff = [], noAnswer = [], cantGo = [], other = [], already = [];
+    D.employees.forEach(function (e) {
+      if (inShift.indexOf(e) >= 0) return;
+      var req = Store.requestOf(e.id, date);
+      if (req === 'off' || req === 'must' || req === 'paid') {
+        wantOff.push({ e: e, why: { off: 'できれば休みたい', must: '絶対に休みたい', paid: '有給を使いたい' }[req] });
+        return;
+      }
+      var av = Store.availOf(e.id, date);
+      if (av === null) { noAnswer.push({ e: e }); return; }
+      if (av === false) { cantGo.push({ e: e }); return; }
+      if (shiftOfEmp(e.id, date)) { already.push({ e: e, why: Store.stById(shiftOfEmp(e.id, date)).name + 'に入っています' }); return; }
+      var ng = Solver.checkManual(D, assignmentsWithout(e.id, date), e.id, date, stId);
+      other.push({ e: e, why: ng.length ? ng[0].msg : '条件は合いますが、他の枠に回っています' });
+    });
+
+    function group(title, list, cls, note) {
+      if (!list.length) return null;
+      var box = el('div', { style: 'margin-top:16px' }, [
+        el('h4', { text: title + '（' + list.length + '名）' })
+      ]);
+      if (note) box.appendChild(el('p', { class: 'hint', text: note }));
+      list.forEach(function (x) {
+        box.appendChild(el('div', { class: 'violation ' + (cls || ''), style: 'margin-bottom:6px' }, [
+          el('div', { class: 'vt', text: x.e.name }),
+          x.why ? el('div', { class: 'vd', text: x.why }) : null
+        ]));
+      });
+      return box;
+    }
+
+    var b = el('div', {}, [
+      el('p', {}, [el('strong', { text: head })]),
+      el('p', { class: 'hint', text: '必要 ' + need + '人 に対して ' + inShift.length + '人です。' }),
+      inShift.length ? el('p', {}, inShift.map(function (e) {
+        return el('span', { class: 'chip', text: e.name });
+      })) : null,
+      group('休みの希望を出している人', wantOff, '',
+        '休みたいと出した日には入れません。どうしても必要なときは本人に確認してください。'),
+      group('まだ希望を出していない人', noAnswer, 'hard',
+        '希望が未入力の日は出勤させません。ここが埋まると人が足りることがあります。'),
+      group('本人が「行けない」と答えた人', cantGo, ''),
+      group('同じ日に別の勤務が入っている人', already, ''),
+      group('その他の理由で入れない人', other, '')
+    ]);
+
+    var foot = [];
+    if (noAnswer.length) foot.push(el('button', {
+      class: 'btn', text: '希望を入れる画面へ', onclick: function () {
+        staffView = noAnswer[0].e.id; scrollTo = 'staffSubmit';
+        closeModal(); switchTab('request');
+      }
+    }));
+    foot.push(el('button', { class: 'btn ghost', text: '閉じる', onclick: closeModal }));
+    modal('人が足りない理由', b, foot);
+  }
+
   /* ================= 欠員対応 ================= */
   /** 「この人が急に休む」→ 代わりを4段階で提示する */
   function absenceDialog(emp, date, stId) {
@@ -1577,9 +1719,7 @@
     p.appendChild(card('集計', null, [
       el('div', { class: 'grid2' }, [
         stat('総労働時間', totalHours.toFixed(1) + ' h'),
-        stat('概算人件費', U.yen(rv.totalPay)),
-        stat('予算', D.settings.budget > 0 ? U.yen(D.settings.budget) : '未設定'),
-        stat('差引', D.settings.budget > 0 ? U.yen(D.settings.budget - rv.totalPay) : '—')
+        stat('概算人件費', U.yen(rv.totalPay))
       ]),
       el('div', { class: 'scroll', style: 'margin-top:12px' }, [el('table', {}, [
         el('thead', {}, [el('tr', {}, ['氏名', '出勤日数', '労働時間', '夜勤', '土日祝', '深夜時間', '時間外', '賃金(概算)', '年収の壁'].map(function (h) { return el('th', { text: h }); }))]),
@@ -1593,7 +1733,7 @@
     // 公平性
     var nights = D.employees.map(function (e) { return st[e.id].nights; });
     var hours = D.employees.map(function (e) { return st[e.id].hours; });
-    p.appendChild(card('公平性', '差が大きい項目は、ルール設定で重みを上げると平準化されます。', [
+    p.appendChild(card('公平性', null, [
       el('div', { class: 'grid2' }, [
         stat('夜勤の最大差', (Math.max.apply(null, nights.concat([0])) - Math.min.apply(null, nights.concat([0]))) + ' 回'),
         stat('労働時間の最大差', (Math.max.apply(null, hours.concat([0])) - Math.min.apply(null, hours.concat([0]))).toFixed(1) + ' h')
@@ -1605,38 +1745,9 @@
   function renderRules() {
     var p = document.getElementById('panel-setup');
     // 法令ルールは常に有効で変更できない。設定として並べても押せないので出さない。
-    var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock; });
+    var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock && d.id !== 'OPS-110'; });
 
-    /* 方針の選択。ふつうはここだけ触れば足りるので、畳まずに表に出す */
-    var PRESETS = {
-      balanced: { label: 'バランス重視', desc: '希望と公平さの両方をほどよく（最初はこれ）', w: {} },
-      request: { label: '希望を通したい', desc: '休みの希望をできるだけ通す。かわりに偏りは増えます', w: { 'OPS-030': 20000, 'OPS-031': 8000, 'OPS-080': 400, 'OPS-081': 300, 'OPS-084': 800 } },
-      fair: { label: '公平にしたい', desc: '夜勤・土日・労働時間の偏りを小さく', w: { 'OPS-030': 4000, 'OPS-031': 1500, 'OPS-080': 2500, 'OPS-081': 1800, 'OPS-084': 3000 } },
-      cost: { label: '人件費を抑えたい', desc: '時給の高い人の出番を減らす（予算の入力が必要）', w: { 'OPS-110': 2500, 'OPS-084': 800, 'OPS-030': 5000 } }
-    };
-    var cur = D.settings.policy || 'balanced';
 
-    p.appendChild(card('シフトの方針', '迷ったら「バランス重視」のままで大丈夫です。', [
-      el('div', { class: 'row' }, Object.keys(PRESETS).map(function (k) {
-        var ps = PRESETS[k];
-        return el('button', {
-          class: 'btn ' + (cur === k ? '' : 'ghost'), text: ps.label, title: ps.desc,
-          onclick: function () {
-            Object.keys(D.ruleConfig).forEach(function (id) { delete D.ruleConfig[id].weight; });
-            Object.keys(ps.w).forEach(function (id) {
-              if (!D.ruleConfig[id]) D.ruleConfig[id] = {};
-              D.ruleConfig[id].weight = ps.w[id];
-            });
-            D.settings.policy = k;
-            saveAndRender(); toast('「' + ps.label + '」で組みます');
-          }
-        });
-      })),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: PRESETS[cur].desc }),
-      el('p', { class: 'hint', text: 'どれを選んでも、労働基準法のルールは必ず守ります。' })
-    ]));
-
-    /* ここから先は、こだわりのある人だけが開く場所 */
     function ruleRow(d) {
       var c = Rules.cfg(D, d.id);
       var body = el('div', { class: 'row', style: 'margin-top:8px' }, [
@@ -1645,7 +1756,7 @@
           function (e) { setRule(d.id, { type: e.target.value }); }))
       ]);
       if (c.type === 'soft')
-        body.appendChild(field('優先度（大きいほど優先）', liveInput('number', c.weight, function (v) { setRuleQuiet(d.id, { weight: U.num(v, 0, 1e6, 0) }); }, { step: 100, min: 0 })));
+        body.appendChild(field('優先度', liveInput('number', c.weight, function (v) { setRuleQuiet(d.id, { weight: U.num(v, 0, 1e6, 0) }); }, { step: 100, min: 0 })));
       if (d.id === 'OPS-027')
         body.appendChild(field('勤務と勤務の間隔（時間）', liveInput('number', c.params.hours, function (v) { setRuleQuiet(d.id, { params: { hours: U.num(v, 0, 24, 0) } }); }, { min: 0, max: 24 })));
 
@@ -1663,8 +1774,7 @@
     }
 
     var wrap = el('details', { class: 'rule', 'data-dk': 'rules' }, [
-      el('summary', { text: '細かく決める（ふだんは触らなくて大丈夫です）' }),
-      el('p', { class: 'hint', text: '上の方針で足りないときだけ、1つずつ調整できます。' }),
+      el('summary', { text: '詳細設定' }),
       el('div', { style: 'margin-top:12px' }, editable.map(ruleRow))
     ]);
     p.appendChild(el('div', { class: 'card' }, [wrap]));
@@ -1713,7 +1823,7 @@
     var filled = dates.filter(function (d) { return dr.avail[d]; }).length;
 
     /* 名前と対象月 */
-    p.appendChild(card('シフト希望の入力', '名前と、行ける日・時間を入れて、いちばん下の［ファイルに保存］を押してください。', [
+    p.appendChild(card('シフト希望の入力', '名前を入れて、カレンダーの日を押して答えてください。終わったら、いちばん下の［LINEなどで送る］を押します。', [
       el('div', { class: 'row' }, [
         el('div', { class: 'field grow' }, [el('label', { text: 'あなたの名前' }),
         input('text', dr.name, function (e) { dr.name = e.target.value; saveDraft(); }, { placeholder: '例）山田 太郎' })]),
@@ -1746,64 +1856,22 @@
       ])
     ]));
 
-    /* 日ごとの入力 */
-    var rows = dates.map(function (d) {
-      var w = U.weekdayOf(d);
-      var av = dr.avail[d] || null;
-      var mode = !av ? '' : av.off ? 'off' : av.allday ? 'allday' : 'time';
+    p.appendChild(requestCalendar({
+      year: dr.year, month: dr.month,
+      getAvail: function (d) { return dr.avail[d] || null; },
+      setAvail: function (d, v) { if (v === null) delete dr.avail[d]; else dr.avail[d] = v; },
+      getReq: function (d) { return dr.requests[d] || ''; },
+      setReq: function (d, v) { if (v === '') delete dr.requests[d]; else dr.requests[d] = v; },
+      after: function () { saveDraft(); render(); }
+    }));
 
-      var fromI = input('time', av && av.from ? av.from : '09:00', function (ev) {
-        if (!U.isTime(ev.target.value)) return;
-        dr.avail[d].from = ev.target.value; saveDraft();
-      });
-      var toI = input('time', av && av.to ? av.to : '18:00', function (ev) {
-        if (!U.isTime(ev.target.value)) return;
-        dr.avail[d].to = ev.target.value; saveDraft();
-      });
-      if (mode !== 'time') { fromI.disabled = true; toI.disabled = true; }
-
-      var sel = select([
-        { v: '', t: '未入力' }, { v: 'allday', t: '終日OK' }, { v: 'time', t: '時間を指定' }, { v: 'off', t: '行けない' }
-      ], mode, function (ev) {
-        var v = ev.target.value;
-        if (v === '') delete dr.avail[d];
-        else if (v === 'allday') dr.avail[d] = { allday: true };
-        else if (v === 'off') dr.avail[d] = { off: true };
-        else dr.avail[d] = { from: fromI.value, to: toI.value };
-        saveDraft(); render();
-      });
-
-      var reqSel = select([
-        { v: '', t: '希望なし' }, { v: 'off', t: 'できれば休みたい' }, { v: 'must', t: '絶対に休みたい' },
-        { v: 'paid', t: '有給を使いたい' }, { v: 'want', t: 'ぜひ入りたい' }
-      ], dr.requests[d] || '', function (ev) {
-        if (ev.target.value === '') delete dr.requests[d]; else dr.requests[d] = ev.target.value;
-        saveDraft();
-      });
-
-      var hol = Store.holidayName(d);
-      return el('tr', { class: 'day-row' }, [
-        el('td', {
-          class: 'daycell ' + (w === 0 || hol ? 'sun' : w === 6 ? 'sat' : ''),
-          'data-label': '日付', text: (+d.slice(8)) + '日（' + U.WD[w] + '）' + (hol ? ' ' + hol : '')
-        }),
-        el('td', { 'data-label': '出勤できる？' }, [sel]),
-        el('td', { 'data-label': '何時から' }, [fromI]),
-        el('td', { 'data-label': '何時まで' }, [toI]),
-        el('td', { 'data-label': '希望' }, [reqSel])
-      ]);
-    });
-
-    p.appendChild(card('', '', [
-      el('div', { class: 'scroll staff-table', style: 'max-height:60vh' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['日付', '出勤できる？', '何時から', '何時まで', '希望'].map(function (h) { return el('th', { text: h }); }))]),
-        el('tbody', {}, rows)
-      ])]),
-      el('div', { class: 'row', style: 'margin-top:14px' }, [
-        el('button', { class: 'btn big', text: 'ファイルに保存する', onclick: saveInputFile }),
-        el('button', { class: 'btn ghost', text: 'コードでコピーする', onclick: copyInputCode })
+    p.appendChild(card('できたら責任者に送る', '入力した内容は残るので、途中で閉じても続きからできます。', [
+      el('div', { class: 'row' }, [
+        el('button', { class: 'btn big', text: 'LINEなどで送る', onclick: shareInputCode }),
+        el('button', { class: 'btn ghost', text: 'コードをコピー', onclick: copyInputCode }),
+        el('button', { class: 'btn ghost', text: 'ファイルに保存', onclick: saveInputFile })
       ]),
-      el('p', { class: 'hint', style: 'margin-top:8px', text: '保存したファイルを責任者に送ってください。入力内容は残るので、閉じても続きからできます。' })
+      el('p', { class: 'hint', style: 'margin-top:8px', text: '責任者は、送られた文をそのまま貼り付けるだけで取り込めます。' })
     ]));
   }
 
@@ -1824,9 +1892,26 @@
     toast('保存しました。責任者に送ってください');
   }
 
+  /** LINE などにそのまま流せる文面にする（名前＋コード） */
+  function shareText() {
+    var obj = inputPayload(); if (!obj) return null;
+    return obj.name + 'さんのシフト希望（' + obj.ym + '）\n' + encodeCode(obj);
+  }
+
+  function shareInputCode() {
+    var text = shareText(); if (!text) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        var pr = navigator.share({ title: 'シフト希望', text: text });
+        if (pr && pr['catch']) pr['catch'](function () { /* 送るのをやめただけ */ });
+        return;
+      }
+    } catch (err) { /* 共有に対応していない端末はコピーに切り替える */ }
+    copyText(text);
+  }
+
   function copyInputCode() {
-    var obj = inputPayload(); if (!obj) return;
-    var code = encodeCode(obj);
+    var code = shareText(); if (!code) return;
     var ta = el('textarea', { readonly: 'readonly', style: 'width:100%;height:140px;font-family:monospace;font-size:11px' });
     ta.value = code;
     modal('提出コード', el('div', {}, [

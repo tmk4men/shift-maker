@@ -92,7 +92,6 @@ button,input,select,textarea{font-family:inherit;font-size:15px;color:inherit}
 }
 .logo svg{fill:var(--bg)}   /* 地の色を反転させて明暗どちらでも見える */
 .app-header h1{font-size:16px}
-.sub{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
 .header-actions{display:flex;gap:8px;flex-wrap:wrap}
 
 /* ---------- 使う人の切り替え（スタッフ / 責任者） ---------- */
@@ -344,6 +343,8 @@ details.rule[open] summary::before{content:'▾ '}
 .guide-step.done .guide-n{background:var(--ok);color:var(--on-solid);border-color:var(--ok)}
 .guide-step.now{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
 .guide-step.now .guide-n{background:var(--accent);color:var(--on-solid);border-color:var(--accent)}
+/* いま開いている場所。押したら見た目が変わると分かるようにする */
+.guide-step.current{border-color:var(--text);border-width:2px;color:var(--text);font-weight:700}
 .guide-next{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   margin-top:16px;padding-top:16px;border-top:1px solid var(--line);
@@ -351,8 +352,36 @@ details.rule[open] summary::before{content:'▾ '}
 }
 .guide-next.done{color:var(--ok)}
 
+/* ---------- 希望入力のカレンダー ---------- */
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.cal-head div{
+  text-align:center;font-size:12px;font-weight:600;color:var(--muted);padding:4px 0;
+}
+.cal-head .sun{color:var(--ng)} .cal-head .sat{color:var(--accent-ink)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-day{
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;
+  min-height:60px;padding:6px 2px;font:inherit;color:inherit;cursor:pointer;
+  border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--panel);
+  transition:border-color var(--ease),background var(--ease);
+}
+.cal-day:hover{border-color:var(--accent)}
+.cal-day:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent)}
+.cal-day .d{font-size:15px;font-weight:700;line-height:1.2}
+.cal-day .s{font-size:10px;line-height:1.3;text-align:center;word-break:keep-all}
+.cal-day .m{font-size:11px;font-weight:700;line-height:1.2;padding:0 4px;border-radius:999px}
+.cal-day.blank{border:none;background:none;cursor:default;min-height:0;padding:0}
+.cal-day.none{background:var(--panel-2);border-style:dashed;color:var(--muted)}
+.cal-day.yes{border-color:var(--ok);background:var(--ok-soft);color:var(--ok)}
+.cal-day.no{background:var(--bg);color:var(--muted)}
+.cal-day.sun .d{color:var(--ng)} .cal-day.sat .d{color:var(--accent-ink)}
+
+/* 入力ボックスの選択肢は、指で押しやすいように並べる */
+.pick{display:flex;gap:8px;flex-wrap:wrap}
+.pick .btn{flex:1 1 132px}
+
 /* ===========================================================
-   スマホ（既定）：希望の入力は「1日 = 1カード」
+   スマホ（既定）
    =========================================================== */
 .staff-table{max-height:none;border:none;overflow:visible;background:none}
 .staff-table table,.staff-table tbody,.staff-table tr,.staff-table td{display:block;width:100%}
