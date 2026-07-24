@@ -309,66 +309,6 @@
     ]), [el('button', { class: 'btn ghost', text: '戻る', onclick: openMenu })]);
   }
 
-  /* ================= 手順ガイド ================= */
-  /** いまどこまで進んでいて、次に何をすればいいか */
-  function steps() {
-    var dates = Store.monthDates();
-    var needSet = dates.some(function (d) {
-      return D.shiftTypes.some(function (st) { return Store.needOf(d, st.id) > 0; });
-    });
-    var hasShift = dates.some(function (d) {
-      return D.shiftTypes.some(function (st) { return Store.assignedOf(d, st.id).length > 0; });
-    });
-    return [
-      { n: 1, tab: 'setup', label: '店の設定', done: needSet, todo: '勤務区分と必要人数を決める' },
-      { n: 2, tab: 'staff', label: 'スタッフ登録', done: D.employees.length > 0, todo: 'スタッフを登録する' },
-      { n: 3, tab: 'request', label: '希望を入れる', done: D.employees.some(function (e) {
-        return dates.some(function (d) { return D.avail[e.id] && D.avail[e.id][d]; });
-      }), todo: 'スタッフの行ける日・時間を入れる' },
-      { n: 4, tab: 'shift', label: 'シフト作成', done: hasShift, todo: 'シフトを自動作成する' }
-    ];
-  }
-
-  function guideBar() {
-    var st = steps();
-    var next = st.filter(function (s) { return !s.done; })[0];
-
-    var strip = el('div', { class: 'guide' }, st.map(function (s) {
-      // done/now は「進み具合」、current は「いま開いている場所」。
-      // 押しても見た目が変わらないと、反応していないように見えるため両方を出す。
-      var here = (s.tab === currentTab);
-      var state = (s.done ? 'done' : (next && next.n === s.n ? 'now' : '')) + (here ? ' current' : '');
-      var b = el('button', {
-        class: 'guide-step ' + state, onclick: function () { switchTab(s.tab); },
-        title: s.todo
-      }, [
-        el('span', { class: 'guide-n', text: s.done ? '✓' : String(s.n) }),
-        el('span', { text: s.label })
-      ]);
-      if (here) b.setAttribute('aria-current', 'step');
-      return b;
-    }));
-
-    var msg;
-    if (!next) {
-      msg = el('div', { class: 'guide-next done' }, [
-        el('span', { text: 'シフトができました。「4. シフト表」で内容を確認できます。' })
-      ]);
-    } else if (next.tab === currentTab) {
-      // すでにその画面にいる。ここで［開く］を出しても押した先が同じ場所で、何も起きない
-      msg = el('div', { class: 'guide-next' }, [
-        el('span', { text: 'この画面で：' + next.todo })
-      ]);
-    } else {
-      msg = el('div', { class: 'guide-next' }, [
-        el('span', { text: '次にやること：' + next.todo }),
-        el('button', { class: 'btn sm', text: '開く', onclick: function () { switchTab(next.tab); } })
-      ]);
-    }
-
-    return el('div', { class: 'guide-wrap' }, [strip, msg]);
-  }
-
   function card(title, hint, children) {
     return el('div', { class: 'card' }, [el('h2', { text: title }), hint ? el('p', { class: 'hint', text: hint }) : null].concat(children));
   }
@@ -377,16 +317,6 @@
   function renderSetup() {
     var p = document.getElementById('panel-setup'); p.innerHTML = '';
     var s = D.settings;
-
-    /* まだ何も登録されていないときだけ、次の一歩を出す */
-    if (!D.employees.length) {
-      p.appendChild(card('まず勤務区分と必要人数を決めてください', null, [
-        el('div', { class: 'row' }, [
-          el('button', { class: 'btn', text: '2. スタッフの登録へ進む', onclick: function () { switchTab('staff'); } }),
-          el('button', { class: 'btn ghost', text: '使い方を見る', onclick: showHowToUse })
-        ])
-      ]));
-    }
 
     p.appendChild(card('店舗・対象月', null, [
       el('div', { class: 'row' }, [
@@ -1968,12 +1898,6 @@
     if (currentTab === 'shift') renderShift();
     if (currentTab === 'summary') renderSummary();
 
-    // どのタブでも先頭に「いまどこまで進んでいるか」を出す
-    var p = document.getElementById('panel-' + currentTab);
-    if (p) {
-      if (p.insertBefore && p.children && p.children.length) p.insertBefore(guideBar(), p.children[0]);
-      else p.appendChild(guideBar());
-    }
     restoreUI(snap);
 
     if (scrollTo) {

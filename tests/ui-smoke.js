@@ -502,40 +502,19 @@ tryRun('使う人の切り替えは、余白を押しても落ちない', () => 
   if (store['shift-maker-mode'] !== before) throw new Error('余白を押しただけでモードが変わった');
 });
 
-tryRun('手順ガイドは、押すと「いまここ」が動く', () => {
-  sandbox.Store.loadDemo();
-  openTab('setup');
-  const steps = () => byId['panel-setup'].all()
-    .filter(n => n.tagName === 'BUTTON' && String(n.className).indexOf('guide-step') >= 0);
-  const here = () => steps().filter(n => String(n.className).indexOf('current') >= 0)
-    .map(n => n.all().map(x => x._text || '').join(''));
-  if (here().length !== 1) throw new Error('「いまここ」が1つでない: ' + JSON.stringify(here()));
-  if (here()[0].indexOf('店の設定') < 0) throw new Error('準備タブなのに店の設定が「いまここ」でない');
-
-  const staffStep = steps().find(n => n.all().some(x => (x._text || '').indexOf('スタッフ登録') >= 0));
-  staffStep.click();
-  const now = byId['panel-staff'].all()
-    .filter(n => n.tagName === 'BUTTON' && String(n.className).indexOf('current') >= 0)
-    .map(n => n.all().map(x => x._text || '').join(''));
-  if (!now.length || now[0].indexOf('スタッフ登録') < 0)
-    throw new Error('押しても「いまここ」が動かない: ' + JSON.stringify(now));
-});
-
-tryRun('すでに開いている画面に対して［開く］を出さない', () => {
-  sandbox.Store.reset();          // まっさら＝次にやることは「準備」
-  openTab('setup');
-  const txt = byId['panel-setup'].all().map(n => n._text || '').join(' ');
-  if (txt.indexOf('この画面で：') < 0)
-    throw new Error('同じ画面なのに案内が「次にやること」のまま');
-  const guideBtn = byId['panel-setup'].all().find(n =>
-    n.tagName === 'BUTTON' && (n._text || '') === '開く');
-  if (guideBtn) throw new Error('押しても何も起きない［開く］が出ている');
-
-  // 別のタブへ行けば［開く］は出る
-  openTab('summary');
-  const b2 = byId['panel-summary'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === '開く');
-  if (!b2) throw new Error('別の画面では［開く］が必要');
-  b2.click();
+tryRun('手順の案内は出さない（タブの番号だけで足りる）', () => {
+  sandbox.Store.reset();
+  ['setup', 'staff', 'request', 'shift', 'summary'].forEach(name => {
+    openTab(name);
+    const txt = byId['panel-' + name].all().map(n => n._text || '').join(' ');
+    ['次にやること', 'この画面で：', 'スタッフの登録へ進む', 'まず勤務区分と必要人数を決めてください']
+      .forEach(t => {
+        if (txt.indexOf(t) >= 0) throw new Error(name + ' に手順の案内「' + t + '」が残っている');
+      });
+    const step = byId['panel-' + name].all()
+      .find(n => n.tagName === 'BUTTON' && String(n.className).indexOf('guide-step') >= 0);
+    if (step) throw new Error(name + ' に手順ガイドが残っている');
+  });
   sandbox.Store.loadDemo();
 });
 

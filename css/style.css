@@ -80,6 +80,21 @@ button,input,select,textarea{font-family:inherit;font-size:15px;color:inherit}
 /* 本文の1行は全角35〜40字までに収める */
 .hint,.vd,.modal-body > p{max-width:36em}
 
+/* ---------- 日本語の折り返し ----------
+   ・句読点や閉じ括弧が行頭に来ないようにする（禁則処理）
+   ・最終行に1〜2文字だけ残るのを避ける
+   ・対応している端末では、文節の切れ目で折り返す */
+html{line-break:strict}
+p,li,summary,.hint,.vd,.vt,.modal-body,label,.stat .k,.mode-s{
+  text-wrap:pretty;
+  word-break:auto-phrase;
+}
+/* コードなど、切れ目のない長い文字列だけは折り返してよい */
+textarea{overflow-wrap:anywhere}
+h1,h2,h3,h4,.card > h2{text-wrap:balance}
+/* 数値や「18〜22日」「0 日（不足3）」は途中で切らない */
+.right,.nowrap,.badge,.chip{white-space:nowrap}
+
 /* ---------- ヘッダー ---------- */
 .app-header{
   display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
@@ -205,7 +220,11 @@ tbody tr:hover td{background:var(--panel-2)}
   background-size:24px 100%,24px 100%,10px 100%,10px 100%;
   background-attachment:local,local,scroll,scroll;
 }
-.scroll table{border:none}
+/* 横スクロールできる枠の中では、表を無理に画面幅へ詰めない。
+   詰めると氏名が1文字ずつ折り返されて読めなくなる。 */
+.scroll table{border:none;width:auto;min-width:100%}
+.scroll td{white-space:nowrap}
+.scroll td.wrap{white-space:normal}
 .scroll th{position:sticky;top:0;z-index:2}
 .scroll th.namecol,.scroll td.namecol{position:sticky;left:0;background:var(--panel);z-index:1;min-width:112px}
 .scroll tbody tr:hover td.namecol{background:var(--panel-2)}
