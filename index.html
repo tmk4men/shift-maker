@@ -73,12 +73,12 @@
   </button>
 </nav>
 
-<nav class="tabs" id="tabs">
-  <button class="tab active" data-tab="setup">1. 準備</button>
-  <button class="tab" data-tab="staff">2. スタッフ</button>
-  <button class="tab" data-tab="request">3. 希望を集める</button>
-  <button class="tab" data-tab="shift">4. シフト表</button>
-  <button class="tab" data-tab="summary">5. 集計</button>
+<nav class="tabs" id="tabs" role="tablist" aria-label="作成の手順">
+  <button class="tab active" data-tab="setup" role="tab" aria-selected="true" aria-controls="panel-setup">1. 準備</button>
+  <button class="tab" data-tab="staff" role="tab" aria-selected="false" aria-controls="panel-staff">2. スタッフ</button>
+  <button class="tab" data-tab="request" role="tab" aria-selected="false" aria-controls="panel-request">3. 希望を集める</button>
+  <button class="tab" data-tab="shift" role="tab" aria-selected="false" aria-controls="panel-shift">4. シフト表</button>
+  <button class="tab" data-tab="summary" role="tab" aria-selected="false" aria-controls="panel-summary">5. 集計</button>
 </nav>
 
 <main id="main">
@@ -90,15 +90,15 @@
   <section class="panel hidden" id="panel-summary"></section>
 </main>
 
-<div id="modal" class="modal hidden">
-  <div class="modal-box">
-    <div class="modal-head"><h3 id="modalTitle">タイトル</h3><button id="modalClose" class="btn ghost">✕</button></div>
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box" tabindex="-1">
+    <div class="modal-head"><h3 id="modalTitle">タイトル</h3><button id="modalClose" class="btn ghost" aria-label="閉じる">✕</button></div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-foot" id="modalFoot"></div>
   </div>
 </div>
 
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
 <script src="js/util.js"></script>
 <script src="js/store.js"></script>

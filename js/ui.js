@@ -109,15 +109,102 @@
     fallback();
   }
 
+  /** 表のセルを、マウスがなくても操作できるようにする（td はそのままでは押せない） */
+  function makeActivatable(node, labelText, onActivate) {
+    node.setAttribute('tabindex', '0');
+    node.setAttribute('role', 'button');
+    if (labelText) node.setAttribute('aria-label', labelText);
+    node.addEventListener('click', onActivate);
+    node.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      e.preventDefault();           // 空白キーで画面が飛ぶのを防ぐ
+      onActivate(e);
+    });
+    return node;
+  }
+
+  /* 表のセルは 300 個を超える。全部を Tab の止まり場にすると表を抜けるだけで大仕事になるので、
+     表全体で止まり場は1つにして、中は矢印キーで移動する（表計算ソフトと同じ感覚）。 */
+  var ARROWS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] };
+
+  function isCell(n) { return !!(n && n.getAttribute && n.getAttribute('role') === 'button' && n.tagName === 'TD'); }
+
+  function gridKeys(e) {
+    var d = ARROWS[e.key];
+    if (!d || !isCell(e.target)) return;
+    var td = e.target, tr = td.parentNode;
+    var col = Array.prototype.indexOf.call(tr.children, td);
+    var next = null;
+    if (d[1]) {
+      next = d[1] < 0 ? td.previousElementSibling : td.nextElementSibling;
+      while (next && !isCell(next)) next = d[1] < 0 ? next.previousElementSibling : next.nextElementSibling;
+    } else {
+      var row = tr;
+      do {
+        row = d[0] < 0 ? row.previousElementSibling : row.nextElementSibling;
+        next = row ? row.children[col] : null;
+      } while (row && !isCell(next));
+    }
+    if (!isCell(next) || !next.focus) return;
+    e.preventDefault();
+    next.focus();
+  }
+
+  function rovingGrid(root) {
+    if (!root.querySelectorAll || !root.addEventListener) return root;   // 擬似DOM では何もしない
+    var cells = Array.prototype.slice.call(root.querySelectorAll('td[role="button"]'));
+    cells.forEach(function (c, i) { c.setAttribute('tabindex', i === 0 ? '0' : '-1'); });
+    root.addEventListener('keydown', gridKeys);
+    root.addEventListener('focusin', function (e) {
+      if (!isCell(e.target)) return;
+      cells.forEach(function (c) { c.setAttribute('tabindex', c === e.target ? '0' : '-1'); });
+    });
+    return root;
+  }
+
+  var modalOpener = null;   // ダイアログを開く前にどこにいたか
+
   function modal(title, bodyNode, footNodes) {
+    var box = document.getElementById('modal');
+    var wasOpen = box.classList && !box.classList.contains('hidden');
+    if (!wasOpen) {
+      var a = document.activeElement;
+      modalOpener = (a && a.focus && a.tagName !== 'BODY') ? a : null;
+    }
     document.getElementById('modalTitle').textContent = title;
     var body = document.getElementById('modalBody'); body.innerHTML = '';
     body.appendChild(bodyNode);
     var foot = document.getElementById('modalFoot'); foot.innerHTML = '';
     (footNodes || []).forEach(function (n) { foot.appendChild(n); });
-    document.getElementById('modal').classList.remove('hidden');
+    box.classList.remove('hidden');
+    // 開いたらダイアログの中にカーソルを移す（背後の画面を操作させない）
+    try {
+      var first = box.querySelector('.modal-body button, .modal-body input, .modal-body select, .modal-body textarea')
+        || box.querySelector('.modal-foot button')
+        || box.querySelector('.modal-box');
+      if (first && first.focus) first.focus();
+    } catch (e) { /* 位置を移せなくても操作はできる */ }
   }
-  function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+  function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+    try { if (modalOpener && document.contains(modalOpener)) modalOpener.focus(); } catch (e) { }
+    modalOpener = null;
+  }
+
+  /** ダイアログを開いている間、Tab が背後の画面へ抜けないようにする */
+  function trapTab(e) {
+    if (e.key !== 'Tab') return;
+    var box = document.getElementById('modal');
+    if (!box || !box.classList || box.classList.contains('hidden')) return;
+    var f = Array.prototype.filter.call(
+      box.querySelectorAll('button, input, select, textarea'),
+      function (n) { return !n.disabled; });
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
 
   function field(label, input) { return el('div', { class: 'field' }, [el('label', { text: label }), input]); }
   function input(type, value, oninput, attrs) {
@@ -333,7 +420,7 @@
               d + '（' + U.WD[U.weekdayOf(d)] + '）',
               el('button', {
                 class: 'btn ghost sm', style: 'margin-left:6px;min-height:24px;padding:0 8px',
-                text: '✕', onclick: function () {
+                text: '✕', 'aria-label': d + ' の臨時休業をやめる', onclick: function () {
                   s.closedDates = s.closedDates.filter(function (x) { return x !== d; });
                   saveAndRender();
                 }
@@ -642,14 +729,14 @@
       })));
     });
 
-    p.appendChild(card('希望一覧（責任者が直接編集も可）', 'クリックで切り替わります。', [
+    p.appendChild(card('希望一覧（責任者が直接編集も可）', 'クリックで切り替わります。表の中は矢印キーでも動けます。', [
       el('div', { class: 'legend' }, [
         el('span', { class: 'req-off', text: '△ 休み希望（できれば）' }),
         el('span', { class: 'req-must', text: '× 絶対休' }),
         el('span', { class: 'req-paid', text: '有 有給' }),
         el('span', { class: 'req-want', text: '◎ 出勤希望' })
       ]),
-      el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [head]), el('tbody', {}, body)])])
+      rovingGrid(el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [head]), el('tbody', {}, body)])]))
     ]));
   }
 
@@ -794,16 +881,28 @@
   var REQ_LABEL = { '': '', off: '△', must: '×', paid: '有', want: '◎' };
   var REQ_CLASS = { '': '', off: 'req-off', must: 'req-must', paid: 'req-paid', want: 'req-want' };
 
+  var REQ_NAME = { '': '希望なし', off: 'できれば休みたい', must: '絶対に休みたい', paid: '有給を使いたい', want: 'ぜひ入りたい' };
+
   function reqCell(e, date) {
+    var td = el('td', {});
     var cur = Store.requestOf(e.id, date);
-    var td = el('td', { class: 'req-cell ' + REQ_CLASS[cur], text: REQ_LABEL[cur] });
-    td.addEventListener('click', function () {
-      var next = REQ_CYCLE[(REQ_CYCLE.indexOf(cur) + 1) % REQ_CYCLE.length];
+
+    /* 押されたセルだけ書き換える。全体を作り直すと人数が増えたときに重くなるため */
+    function paint() {
+      td.className = 'req-cell ' + REQ_CLASS[cur];
+      td.textContent = REQ_LABEL[cur];
+      td.setAttribute('aria-label',
+        e.name + ' ' + date.slice(5) + ' ' + REQ_NAME[cur] + '（押すと切り替わります）');
+    }
+    paint();
+
+    return makeActivatable(td, '', function () {
+      cur = REQ_CYCLE[(REQ_CYCLE.indexOf(cur) + 1) % REQ_CYCLE.length];
       if (!D.requests[e.id]) D.requests[e.id] = {};
-      if (next === '') delete D.requests[e.id][date]; else D.requests[e.id][date] = next;
-      Store.save(); render();
+      if (cur === '') delete D.requests[e.id][date]; else D.requests[e.id][date] = cur;
+      Store.save();
+      paint();
     });
-    return td;
   }
 
   function staffSubmitCard(e, dates) {
@@ -1045,17 +1144,19 @@
       var days = 0, mins = 0;
       var tds = dates.map(function (d) {
         var stId = shiftOfEmp(e.id, d);
-        var td;
+        var td, what;
         if (stId) {
           var st = Store.stById(stId);
           days++; mins += Store.stCalc(st).work;
+          what = st.name;
           td = el('td', { class: 'cell-shift', text: st.short || st.name, style: 'background:' + st.color + '4d;color:inherit' });
         } else {
           var req = Store.requestOf(e.id, d);
+          what = req ? REQ_NAME[req] : '休み';
           td = el('td', { class: 'cell-shift empty ' + (REQ_CLASS[req] || ''), text: req ? REQ_LABEL[req] : '・' });
         }
-        td.addEventListener('click', function () { openCell(e, d); });
-        return td;
+        return makeActivatable(td, e.name + ' ' + d.slice(5) + ' ' + what + '（押すと変更できます）',
+          function () { openCell(e, d); });
       });
       return el('tr', {}, [el('td', { class: 'namecol', text: e.name })].concat(tds)
         .concat([el('td', { class: 'right', text: String(days) }), el('td', { class: 'right', text: U.min2h(mins) })]));
@@ -1074,8 +1175,8 @@
       })).concat([el('td', {}), el('td', {})]));
     });
 
-    p.appendChild(card('シフト表', 'セルをクリックすると、勤務の変更と「急に休むときの代わりさがし」ができます。', [
-      el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [thead]), el('tbody', {}, rows.concat(needRows))])])
+    p.appendChild(card('シフト表', 'セルをクリックすると、勤務の変更と「急に休むときの代わりさがし」ができます。表の中は矢印キーでも動けます。', [
+      rovingGrid(el('div', { class: 'scroll' }, [el('table', {}, [el('thead', {}, [thead]), el('tbody', {}, rows.concat(needRows))])]))
     ]));
   }
 
@@ -1731,7 +1832,9 @@
   function syncMode() {
     var isInput = (mode === 'input');
     Array.prototype.forEach.call(document.querySelectorAll('.mode'), function (b) {
-      b.classList.toggle('active', b.dataset.mode === mode);
+      var on = b.dataset.mode === mode;
+      b.classList.toggle('active', on);
+      if (b.setAttribute) b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
     var tabs = document.getElementById('tabs');
     if (tabs && tabs.style) tabs.style.display = isInput ? 'none' : '';
@@ -1747,7 +1850,9 @@
   function switchTab(name) {
     currentTab = name;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
-      t.classList.toggle('active', t.dataset.tab === name);
+      var on = t.dataset.tab === name;
+      t.classList.toggle('active', on);
+      if (t.setAttribute) t.setAttribute('aria-selected', on ? 'true' : 'false');
     });
     Array.prototype.forEach.call(document.querySelectorAll('.panel'), function (pn) {
       pn.classList.toggle('hidden', pn.id !== 'panel-' + name);
@@ -1809,6 +1914,7 @@
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') { trapTab(e); return; }
     if (e.key !== 'Escape') return;
     var m = document.getElementById('modal');
     if (m && m.classList && !m.classList.contains('hidden')) closeModal();

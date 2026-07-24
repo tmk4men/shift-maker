@@ -448,6 +448,52 @@ tryRun('使う人の切り替えは、余白を押しても落ちない', () => 
   if (store['shift-maker-mode'] !== before) throw new Error('余白を押しただけでモードが変わった');
 });
 
+/* ---------- マウスがなくても操作できるか ---------- */
+console.log('\n=== キーボードと読み上げ ===');
+
+const cellsOf = (panel, cls) => panel.all()
+  .filter(n => n.tagName === 'TD' && String(n.className).indexOf(cls) >= 0);
+
+tryRun('希望のセルはキーボードで押せる', () => {
+  sandbox.Store.loadDemo();
+  openTab('request');
+  const cells = cellsOf(byId['panel-request'], 'req-cell');
+  if (!cells.length) throw new Error('希望のセルがない');
+  const c = cells[0];
+  if (c.attrs.tabindex !== '0') throw new Error('カーソルが当たらない');
+  if (c.attrs.role !== 'button') throw new Error('押せるものだと伝わらない');
+  if (!c.attrs['aria-label']) throw new Error('読み上げ用の説明がない');
+
+  const before = c._text, label = c.attrs['aria-label'];
+  c.fire('keydown', { key: 'Enter', preventDefault() { } });
+  if (c._text === before) throw new Error('Enter で切り替わらない');
+  if (c.attrs['aria-label'] === label) throw new Error('説明が更新されない');
+  if (byId['panel-request'].all().indexOf(c) < 0) throw new Error('1つ押すたびに全体を作り直している');
+});
+
+tryRun('シフトのセルもキーボードで開ける', () => {
+  openTab('shift');
+  const cells = cellsOf(byId['panel-shift'], 'cell-shift');
+  if (!cells.length) throw new Error('シフトのセルがない');
+  const c = cells[0];
+  if (c.attrs.tabindex !== '0' || c.attrs.role !== 'button') throw new Error('キーボードで押せない');
+  if (!c.attrs['aria-label']) throw new Error('読み上げ用の説明がない');
+  c.fire('keydown', { key: 'Enter', preventDefault() { } });
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  if (txt.indexOf('提出') < 0) throw new Error('勤務の変更が開かない');
+  byId['modalClose'].click();
+});
+
+tryRun('いま開いているタブ・使う人が読み上げで分かる', () => {
+  openTab('staff');
+  const on = tabButtons.filter(t => t.attrs['aria-selected'] === 'true');
+  if (on.length !== 1 || on[0].dataset.tab !== 'staff')
+    throw new Error('aria-selected が正しくない: ' + tabButtons.map(t => t.attrs['aria-selected']).join(','));
+  setMode('manage');
+  const pressed = modeButtons.filter(m => m.attrs['aria-pressed'] === 'true');
+  if (pressed.length !== 1) throw new Error('aria-pressed が正しくない');
+});
+
 /* ---------- 壊れた保存データからの復帰 ---------- */
 console.log('\n=== 異常系 ===');
 [['壊れたJSON', '{壊れている'], ['空オブジェクト', '{}'], ['配列', '[]'], ['文字列', '"abc"'], ['null', 'null']].forEach(([label, raw]) => {
