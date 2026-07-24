@@ -3,6 +3,10 @@ node_modules/
 Thumbs.db
 *.log
 
+# Capacitor（Mac側で生成。ビルド成果物はコミットしない）
+www/
+ios/
+
 # 個人メモ（公開しない）
 お侍さん/
 CLAUDE.md
