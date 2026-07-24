@@ -250,10 +250,14 @@ var Rules = (function () {
       } else if (av === false) {
         ng('OPS-033', '本人が「この日は不可」と提出しています');
       } else if (av !== 'any') {
-        var af = U.hm2min(av.from), at = U.hm2min(av.to);
-        if (at <= af) at += 1440;
-        if (c.start < af || c.end > at)
-          ng('OPS-033', '提出された勤務可能時間（' + av.from + '〜' + av.to + '）の外です');
+        // 出せる時間帯は1日にいくつあってもよい。どれか1つに収まればOK
+        var fits = av.some(function (s) {
+          var af = U.hm2min(s.from), at = U.hm2min(s.to);
+          if (at <= af) at += 1440;
+          return c.start >= af && c.end <= at;
+        });
+        if (!fits)
+          ng('OPS-033', '出せる時間（' + Store.availText(av) + '）の外です');
       }
     }
 

@@ -437,14 +437,32 @@ var Store = (function () {
   }
   /** 提出済みの勤務可能時間
    *  null = 未提出 / false = その日は不可 / 'any' = 終日可 / {from,to} = 時間指定 */
+  /** その日に出られる時間帯の一覧。1日に複数（午前と夜など）を持てる。
+      戻り値: null=未入力 / false=行けない / 'any'=終日 / [{from,to},…] */
   function availOf(empId, date) {
     var a = get().avail[empId];
     if (!a || !a[date]) return null;
-    var v = a[date];
+    return availSlots(a[date]);
+  }
+  /** 保存形の違い（古い {from,to} と新しい {slots:[…]}）を1つにそろえる */
+  function availSlots(v) {
+    if (!v) return null;
     if (v.off) return false;
     if (v.allday) return 'any';
-    if (v.from && v.to) return { from: v.from, to: v.to };
-    return null;
+    var list = [];
+    if (v.slots && v.slots.length) {
+      v.slots.forEach(function (x) { if (x && x.from && x.to) list.push({ from: x.from, to: x.to }); });
+    } else if (v.from && v.to) {
+      list.push({ from: v.from, to: v.to });
+    }
+    return list.length ? list : null;
+  }
+  /** 画面に出す文字（「9:00〜13:00 / 17:00〜22:00」） */
+  function availText(av) {
+    if (av === null || av === undefined) return '未入力';
+    if (av === false) return '行けない';
+    if (av === 'any') return '終日OK';
+    return av.map(function (s) { return s.from + '〜' + s.to; }).join(' / ');
   }
   function setAvail(empId, date, val) {
     var d = get();
@@ -483,7 +501,8 @@ var Store = (function () {
     guessEmployee: guessEmployee, addEmployee: addEmployee,
     stCalc: stCalc, empById: empById, stById: stById, monthDates: monthDates,
     needOf: needOf, assignedOf: assignedOf, requestOf: requestOf,
-    availOf: availOf, setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,
+    availOf: availOf, availSlots: availSlots, availText: availText,
+    setAvail: setAvail, submissionOf: submissionOf, submittedCount: submittedCount,
     isHoliday: isHoliday, holidayName: holidayName, isWeekendOrHoliday: isWeekendOrHoliday,
     isClosed: isClosed
   };

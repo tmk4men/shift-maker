@@ -863,7 +863,9 @@
       var req = cfg.getReq(d);
 
       var state = m === '' ? 'none' : m === 'off' ? 'no' : 'yes';
-      var sub = m === 'time' ? (av.from + '〜') : AVAIL_LABEL[m];
+      var slots = m === 'time' ? Store.availSlots(av) : null;
+      var sub = m !== 'time' ? AVAIL_LABEL[m]
+        : slots.length === 1 ? slots[0].from + '〜' : '時間' + slots.length + 'つ';
 
       var b = el('button', {
         class: 'cal-day ' + state + (w === 0 || hol ? ' sun' : w === 6 ? ' sat' : ''),
@@ -893,8 +895,9 @@
 
     var av = cfg.getAvail(date);
     var m = availMode(av);
-    var from = (av && av.from) || '09:00';
-    var to = (av && av.to) || '18:00';
+    // 「午前だけ」「夜だけ」のように、1日にいくつでも時間帯を持てる
+    var slots = m === 'time' ? Store.availSlots(av).map(function (s) { return { from: s.from, to: s.to }; }) : [];
+    function saveSlots() { cfg.setAvail(date, slots.length ? { slots: slots } : null); }
 
     var b = el('div', {}, []);
 
@@ -909,22 +912,44 @@
           if (o.v === '') cfg.setAvail(date, null);
           else if (o.v === 'allday') cfg.setAvail(date, { allday: true });
           else if (o.v === 'off') cfg.setAvail(date, { off: true });
-          else cfg.setAvail(date, { from: from, to: to });
+          else cfg.setAvail(date, { slots: slots.length ? slots : [{ from: '09:00', to: '18:00' }] });
           redraw();
         }
       });
     })));
 
     if (m === 'time') {
-      var fromI = input('time', from, null, { onchange: function (ev) {
-        if (U.isTime(ev.target.value)) { cfg.setAvail(date, { from: ev.target.value, to: to }); redraw(); }
-      } });
-      var toI = input('time', to, null, { onchange: function (ev) {
-        if (U.isTime(ev.target.value)) { cfg.setAvail(date, { from: from, to: ev.target.value }); redraw(); }
-      } });
-      b.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [
-        field('何時から', fromI), field('何時まで', toI)
+      slots.forEach(function (s, i) {
+        var fromI = input('time', s.from, null, { onchange: function (ev) {
+          if (!U.isTime(ev.target.value)) return;
+          s.from = ev.target.value; saveSlots(); redraw();
+        } });
+        var toI = input('time', s.to, null, { onchange: function (ev) {
+          if (!U.isTime(ev.target.value)) return;
+          s.to = ev.target.value; saveSlots(); redraw();
+        } });
+        b.appendChild(el('div', { class: 'row', style: 'margin-top:8px;align-items:flex-end' }, [
+          field(i === 0 ? '何時から' : '（' + (i + 1) + 'つめ）何時から', fromI),
+          field('何時まで', toI),
+          slots.length > 1 ? el('button', {
+            class: 'btn ghost sm danger', text: 'この時間帯を消す',
+            onclick: function () { slots.splice(i, 1); saveSlots(); redraw(); }
+          }) : null
+        ].filter(Boolean)));
+      });
+
+      b.appendChild(el('div', { style: 'margin-top:10px' }, [
+        el('button', {
+          class: 'btn ghost sm', text: '＋ 時間帯を増やす',
+          onclick: function () {
+            var last = slots[slots.length - 1];
+            slots.push({ from: last ? last.to : '09:00', to: '22:00' });
+            saveSlots(); redraw();
+          }
+        })
       ]));
+      b.appendChild(el('p', { class: 'hint', style: 'margin-top:6px', text:
+        '午前と夜だけ行ける、のように分かれるときは時間帯を増やしてください。' }));
     }
 
     var req = cfg.getReq(date);
@@ -991,7 +1016,8 @@
           dates.forEach(function (d) {
             var cur = D.avail[e.id][d];
             if (cur && cur.off) return;
-            D.avail[e.id][d] = { from: (cur && cur.from) || '09:00', to: (cur && cur.to) || '18:00' };
+            var keep = Store.availSlots(cur);
+            D.avail[e.id][d] = { slots: (keep && keep !== 'any' && keep !== false) ? keep : [{ from: '09:00', to: '18:00' }] };
           });
           Store.save(); render();
         }
@@ -1316,7 +1342,7 @@
 
     // 提出内容
     var av = Store.availOf(e.id, date);
-    var avText = av === null ? '未提出' : av === false ? '本人「行けない」' : av === 'any' ? '終日OK' : (av.from + '〜' + av.to);
+    var avText = av === null ? '未提出' : av === false ? '本人「行けない」' : Store.availText(av);
     var req = Store.requestOf(e.id, date);
     b.appendChild(el('p', {}, [
       el('span', { class: 'chip', text: '提出：' + avText }),

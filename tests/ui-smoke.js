@@ -518,6 +518,47 @@ tryRun('手順の案内は出さない（タブの番号だけで足りる）', 
   sandbox.Store.loadDemo();
 });
 
+tryRun('1日に複数の時間帯を出せる', () => {
+  sandbox.Store.loadDemo();
+  const d = sandbox.Store.get();
+  const e = d.employees[0];
+  const day = sandbox.Store.monthDates()[8];
+  const st = id => d.shiftTypes.find(x => x.id === id) || d.shiftTypes[0];
+
+  const fits = () => {
+    const ctx = sandbox.Rules.buildContext(d, {});
+    const out = {};
+    d.shiftTypes.forEach(x => {
+      out[x.name] = sandbox.Rules.hardCheck(ctx, e.id, day, x.id)
+        .filter(v => v.ruleId === 'OPS-033').length === 0;
+    });
+    return out;
+  };
+
+  // 早番 08:00-17:00 / 遅番 13:00-22:00 / 夜勤 22:00-07:00 を前提にする
+  d.avail[e.id] = {}; d.avail[e.id][day] = { slots: [{ from: '08:00', to: '17:00' }] };
+  sandbox.Store.save();
+  let r = fits();
+  if (!r['早番'] || r['遅番']) throw new Error('1つの時間帯の判定が違う: ' + JSON.stringify(r));
+
+  // 「朝と夜だけ行ける」＝1つの範囲では表せない組み合わせ
+  d.avail[e.id][day] = { slots: [{ from: '08:00', to: '17:00' }, { from: '22:00', to: '07:00' }] };
+  sandbox.Store.save();
+  r = fits();
+  if (!r['早番'] || !r['夜勤']) throw new Error('複数の時間帯が通らない: ' + JSON.stringify(r));
+  if (r['遅番']) throw new Error('どの時間帯にも入らない勤務が通ってしまう: ' + JSON.stringify(r));
+
+  // 古い保存形式（{from,to}）も読めること
+  d.avail[e.id][day] = { from: '08:00', to: '17:00' };
+  sandbox.Store.save();
+  r = fits();
+  if (!r['早番'] || r['遅番']) throw new Error('古い形式が読めない: ' + JSON.stringify(r));
+
+  // 表示用の文字
+  const txt = sandbox.Store.availText(sandbox.Store.availOf(e.id, day));
+  if (txt.indexOf('08:00') < 0) throw new Error('表示用の文字が作れない: ' + txt);
+});
+
 /* ---------- マウスがなくても操作できるか ---------- */
 console.log('\n=== キーボードと読み上げ ===');
 
