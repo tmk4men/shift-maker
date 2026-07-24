@@ -193,6 +193,18 @@ tbody tr:hover td{background:var(--panel-2)}
 .scroll{
   overflow:auto;max-height:70vh;border:1px solid var(--line);
   border-radius:var(--r-md);background:var(--panel);
+
+  /* 右（左）にまだ続きがあるときだけ、端に影を出す。
+     スクロールできることに気づかないと、無いものとして扱われてしまうため。 */
+  background-image:
+    linear-gradient(to right, var(--panel), rgba(0,0,0,0)),
+    linear-gradient(to left,  var(--panel), rgba(0,0,0,0)),
+    linear-gradient(to right, rgba(90,75,60,.16), rgba(0,0,0,0)),
+    linear-gradient(to left,  rgba(90,75,60,.16), rgba(0,0,0,0));
+  background-position:left center,right center,left center,right center;
+  background-repeat:no-repeat;
+  background-size:24px 100%,24px 100%,10px 100%,10px 100%;
+  background-attachment:local,local,scroll,scroll;
 }
 .scroll table{border:none}
 .scroll th{position:sticky;top:0;z-index:2}
@@ -369,11 +381,18 @@ details.rule[open] summary::before{content:'▾ '}
 @media (pointer: coarse){
   .cell-shift,.req-cell{padding:12px 4px}
   .btn.sm{min-height:40px}
+  table input,table select,table .switch{min-height:44px}
 }
 
 /* ===========================================================
    小さいスマホ（420px 以下）：余白と文字を詰めて、5つのタブを見せる
    =========================================================== */
+/* 狭い画面ではタブを折り返す。横に隠れると「5. 集計」の存在に気づかれない */
+@media (max-width: 620px){
+  .tabs{flex-wrap:wrap;overflow-x:visible}
+  .tab{flex:1 1 auto;text-align:center}
+}
+
 @media (max-width: 420px){
   main{padding:12px}
   .card{padding:16px 12px}
