@@ -40,13 +40,14 @@ function makeNode(tag) {
 
 const byId = {};
 ['modal', 'modalTitle', 'modalBody', 'modalFoot', 'modalClose', 'toast', 'tabs', 'modes',
-  'btnMenu', 'fileImport', 'fileRequests', 'panel-input',
+  'btnMenu', 'fileImport', 'fileRequests', 'panel-input', 'tabSelect',
   'panel-setup', 'panel-staff', 'panel-request', 'panel-shift', 'panel-summary']
   .forEach(id => { byId[id] = makeNode('div'); byId[id].id = id; });
 
-const tabButtons = ['setup', 'staff', 'request', 'shift', 'summary'].map(name => {
-  const b = makeNode('button'); b.className = 'tab'; b.dataset.tab = name; return b;
-});
+const tabSelect = makeNode('select');
+tabSelect.id = 'tabSelect';
+tabSelect.value = 'setup';
+byId['tabSelect'] = tabSelect;
 const allPanels = ['input', 'setup', 'staff', 'request', 'shift', 'summary'].map(n => byId['panel-' + n]);
 
 const modeButtons = ['input', 'manage'].map(m => {
@@ -59,7 +60,7 @@ const document = {
   createTextNode: t => ({ nodeType: 3, textContent: String(t) }),
   getElementById: id => byId[id] || makeNode('div'),
   querySelector: () => makeNode('div'),
-  querySelectorAll: sel => sel === '.tab' ? tabButtons : sel === '.mode' ? modeButtons
+  querySelectorAll: sel => sel === '.mode' ? modeButtons
     : sel === '.panel' ? allPanels : [],
   addEventListener(ev, fn) { if (ev === 'keydown') documentKeydown.push(fn); }
 };
@@ -122,11 +123,9 @@ tryRun('ui.js の読み込みと初期描画', () => {
 });
 
 /* ---------- 各タブ ---------- */
-const tabsEl = byId['tabs'];
 function openTab(name) {
-  const btn = tabButtons.find(b => b.dataset.tab === name);
-  btn.classList.contains = c => c === 'tab';
-  (tabsEl._listeners.click || []).forEach(f => f({ target: btn }));
+  tabSelect.value = name;
+  (tabSelect._listeners.change || []).forEach(f => f({ target: tabSelect }));
 }
 ['setup', 'staff', 'request', 'shift', 'summary'].forEach(name => {
   tryRun('タブ「' + name + '」を開く', () => openTab(name));
@@ -664,11 +663,9 @@ tryRun('シフトのセルもキーボードで開ける', () => {
   byId['modalClose'].click();
 });
 
-tryRun('いま開いているタブ・使う人が読み上げで分かる', () => {
+tryRun('いま開いている画面・使う人が読み上げで分かる', () => {
   openTab('staff');
-  const on = tabButtons.filter(t => t.attrs['aria-selected'] === 'true');
-  if (on.length !== 1 || on[0].dataset.tab !== 'staff')
-    throw new Error('aria-selected が正しくない: ' + tabButtons.map(t => t.attrs['aria-selected']).join(','));
+  if (tabSelect.value !== 'staff') throw new Error('プルダウンが今の画面を指していない: ' + tabSelect.value);
   setMode('manage');
   const pressed = modeButtons.filter(m => m.attrs['aria-pressed'] === 'true');
   if (pressed.length !== 1) throw new Error('aria-pressed が正しくない');

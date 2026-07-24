@@ -2048,11 +2048,8 @@
 
   function switchTab(name) {
     currentTab = name;
-    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
-      var on = t.dataset.tab === name;
-      t.classList.toggle('active', on);
-      if (t.setAttribute) t.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
+    var sel = document.getElementById('tabSelect');
+    if (sel && sel.value !== name) sel.value = name;
     Array.prototype.forEach.call(document.querySelectorAll('.panel'), function (pn) {
       pn.classList.toggle('hidden', pn.id !== 'panel-' + name);
     });
@@ -2099,11 +2096,8 @@
     if (m) setMode(m);
   });
 
-  var tabsEl = document.getElementById('tabs');
-  tabsEl.addEventListener('click', function (e) {
-    var t = hitTarget(e.target, 'tab', tabsEl.parentNode);
-    if (t) switchTab(t);
-  });
+  var tabSelect = document.getElementById('tabSelect');
+  if (tabSelect) tabSelect.addEventListener('change', function () { switchTab(tabSelect.value); });
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
   document.addEventListener('keydown', function (e) {

@@ -25,6 +25,7 @@
 <body>
 
 <header class="app-header">
+  <h1 class="sr-only">KINMATE</h1>
   <div class="brand">
     <span class="logo" aria-hidden="true">
       <svg width="22" height="22" viewBox="0 0 64 64">
@@ -33,10 +34,19 @@
         <rect x="14" y="39" width="9" height="8" rx="2"/><rect x="27.5" y="39" width="9" height="8" rx="2" opacity=".45"/><rect x="41" y="39" width="9" height="8" rx="2"/>
       </svg>
     </span>
-    <div>
-      <h1>KINMATE</h1>
-    </div>
   </div>
+
+  <div class="tabs" id="tabs">
+    <label class="sr-only" for="tabSelect">いまの作業</label>
+    <select class="step-select" id="tabSelect">
+      <option value="setup">1. 準備</option>
+      <option value="staff">2. スタッフ</option>
+      <option value="request">3. 希望を集める</option>
+      <option value="shift">4. シフト表</option>
+      <option value="summary">5. 集計</option>
+    </select>
+  </div>
+
   <div class="header-actions">
     <input type="file" id="fileImport" accept="application/json" hidden>
     <input type="file" id="fileRequests" accept="application/json,.json" multiple hidden>
@@ -59,14 +69,6 @@
     <span class="mode-t">シフトを作る</span>
     <span class="mode-s">責任者の方はこちら</span>
   </button>
-</nav>
-
-<nav class="tabs" id="tabs" role="tablist" aria-label="作成の手順">
-  <button class="tab active" data-tab="setup" role="tab" aria-selected="true" aria-controls="panel-setup">1. 準備</button>
-  <button class="tab" data-tab="staff" role="tab" aria-selected="false" aria-controls="panel-staff">2. スタッフ</button>
-  <button class="tab" data-tab="request" role="tab" aria-selected="false" aria-controls="panel-request">3. 希望を集める</button>
-  <button class="tab" data-tab="shift" role="tab" aria-selected="false" aria-controls="panel-shift">4. シフト表</button>
-  <button class="tab" data-tab="summary" role="tab" aria-selected="false" aria-controls="panel-summary">5. 集計</button>
 </nav>
 
 <main id="main">
