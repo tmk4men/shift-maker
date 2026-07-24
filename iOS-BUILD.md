@@ -9,16 +9,11 @@ Capacitor 8 で Web アプリ（このリポジトリ）をネイティブの iO
 
 ---
 
-## 0. 最初に：Bundle ID を決める（一度公開したら変更不可）
+## 0. Bundle ID（確定済み・一度公開したら変更不可）
 
-`capacitor.config.json` の `appId` が **`com.example.kinmate`（仮）** になっている。
-**`cap add ios` を実行する前に**、自分のドメイン等に合わせて必ず書き換える。
-
-```json
-{ "appId": "com.あなたの識別子.kinmate", "appName": "KINMATE", "webDir": "www", "ios": { "contentInset": "always" } }
-```
-
-書き換えてから add すると、その ID で Xcode プロジェクトが生成される。add 後に変えるなら Xcode の Signing & Capabilities → Bundle Identifier も直す。
+`capacitor.config.json` の `appId` は **`com.loge.kinmate`** で確定。
+`cap add ios` するとこの ID で Xcode プロジェクトが生成される。
+App Store Connect でも同じ Bundle ID `com.loge.kinmate` でアプリを登録する。
 
 ---
 
