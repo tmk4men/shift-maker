@@ -391,6 +391,51 @@ tryRun('知らない名前のときは、誰の希望か確認してから取り
 
   const sel = byId['modalBody'].all().find(n => n.tagName === 'SELECT');
   if (!sel) throw new Error('知らない名前なのに確認のプルダウンが出ない');
+  // 一覧に登録済みスタッフが並び、初期は未選択（勝手に新規登録しない）
+  const optVals = sel.children.map(o => o.attrs.value);
+  if (optVals.indexOf('e1') < 0) throw new Error('スタッフ一覧が選べない');
+  const chosen = sel.children.filter(o => o.selected).map(o => o.attrs.value);
+  if (chosen[0] && chosen[0] !== '') throw new Error('一致しないのに初期選択されている: ' + chosen[0]);
+});
+
+tryRun('週の最低日数を店長側で決められ、届かない週は不足として報告する', () => {
+  sandbox.Store.loadDemo();
+  const d = sandbox.Store.get();
+  d.employees.forEach(e => {
+    e.weeklyDaysMin = 3;
+    d.avail[e.id] = {}; d.requests[e.id] = {};
+    sandbox.Store.monthDates().forEach(x => { d.avail[e.id][x] = { allday: true }; });
+  });
+  sandbox.Store.save();
+
+  const res = sandbox.Solver.generate(sandbox.Store.get());
+  const shiftOf = {};
+  d.employees.forEach(e => { shiftOf[e.id] = {}; });
+  Object.keys(res.assignments).forEach(dt =>
+    Object.keys(res.assignments[dt] || {}).forEach(st =>
+      (res.assignments[dt][st] || []).forEach(id => { if (shiftOf[id]) shiftOf[id][dt] = st; })));
+
+  let shortReported = res.violations.filter(v => v.ruleId === 'OPS-A10').length;
+  let actualShort = 0;
+  d.employees.forEach(e => {
+    const wk = {};
+    sandbox.Store.monthDates().forEach(dt => {
+      if (!shiftOf[e.id][dt]) return;
+      const k = sandbox.Rules.weekKey(d, dt);
+      wk[k] = (wk[k] || 0) + 1;
+    });
+    Object.keys(wk).forEach(k => { if (wk[k] > 0 && wk[k] < 3) actualShort++; });
+  });
+  if (actualShort !== shortReported)
+    throw new Error('下限割れの週数(' + actualShort + ')と報告数(' + shortReported + ')が合わない');
+
+  // 編集画面に下限・上限の両方がある
+  openTab('staff');
+  findButton(byId['panel-staff'], '編集').click();
+  const dlg = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  if (dlg.indexOf('週の最低日数') < 0) throw new Error('週の最低日数の設定がない');
+  if (dlg.indexOf('週の最大日数') < 0) throw new Error('週の最大日数の設定がない');
+  byId['modalClose'].click();
 });
 
 tryRun('店長にもスタッフにも、時給と扶養の設定は出さない', () => {
@@ -675,7 +720,7 @@ tryRun('1週間に入れる回数の上限を守る', () => {
   if (txt.indexOf('2日') < 0) throw new Error('一覧に週の日数が出ていない');
   findButton(byId['panel-staff'], '編集').click();
   const dlg = byId['modalBody'].all().map(n => n._text || '').join(' ');
-  if (dlg.indexOf('入れたい日数/週') < 0) throw new Error('編集画面に日数/週の設定がない');
+  if (dlg.indexOf('週の最大日数') < 0) throw new Error('編集画面に日数/週の設定がない');
   byId['modalClose'].click();
 });
 

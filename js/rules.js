@@ -49,7 +49,8 @@ var Rules = (function () {
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者を使いすぎない', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
     { id: 'OPS-A05', cat: 'ops', name: '月のはじめと終わりで偏らせない', type: 'soft', weight: 2500, params: {}, desc: '月の前半で出勤枠を使い切って後半が空になるのを防ぐ。' },
     { id: 'OPS-A07', cat: 'ops', name: '週の労働時間の上限', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間の勤務時間の上限を決められます。' },
-    { id: 'OPS-A08', cat: 'ops', name: '入れたい日数/週', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間に入れる日数の上限を決められます。' }
+    { id: 'OPS-A08', cat: 'ops', name: '入れたい日数/週', type: 'hard', weight: 1200, params: {}, desc: '人ごとに、1週間に入れる日数の上限を決められます。' },
+    { id: 'OPS-A10', cat: 'ops', name: '週の最低日数', type: 'soft', weight: 500, params: {}, desc: '人ごとに、1週間の最低出勤日数を決められます。届くよう優先し、届かないときは不足として報告します。' }
   ];
 
   var DEF_MAP = {};
@@ -399,6 +400,14 @@ var Rules = (function () {
     add(-(e.priority || 0) * cfg(data, 'OPS-A01').weight, 'OPS-A01',
       (e.priority > 0 ? '多めに入れたい設定' : e.priority < 0 ? '控えめにする設定' : ''));
 
+    // 週の最低日数の未達を優先的に埋める（その週にまだ足りていないほど強く効かせる）
+    if (on(data, 'OPS-A10') && e.weeklyDaysMin > 0) {
+      var wk2 = weekKey(data, date);
+      var wLack = Math.max(0, e.weeklyDaysMin - (s.weekDays[wk2] || 0));
+      add(-wLack * cfg(data, 'OPS-A10').weight, 'OPS-A10',
+        wLack > 0 ? 'この週の最低' + e.weeklyDaysMin + '日まであと' + wLack + '日' : '');
+    }
+
     // 最低日数の未達を優先的に埋める
     var lackDays = Math.max(0, (e.minDays || 0) - s.days);
     var lackMin = Math.max(0, (e.minHoursMonth || 0) * 60 - s.minutes);
@@ -577,6 +586,14 @@ var Rules = (function () {
         Object.keys(s.weekDays).forEach(function (wk) {
           if (s.weekDays[wk] > e.weeklyDaysCap)
             push('hard', 'OPS-A08', e.name + 'さん：' + wk + 'の週が' + s.weekDays[wk] + '日（入れたい日数/週 ' + e.weeklyDaysCap + '日を超過）', '', '', e.id);
+        });
+      }
+      if (e.weeklyDaysMin > 0) {
+        // その週に1件でも勤務があるのに下限に届かない週だけ報告する
+        // （まったく出ない週まで数えると、休みの週も不足扱いになってしまう）
+        Object.keys(s.weekDays).forEach(function (wk) {
+          if (s.weekDays[wk] > 0 && s.weekDays[wk] < e.weeklyDaysMin)
+            push('soft', 'OPS-A10', e.name + 'さん：' + wk + 'の週が' + s.weekDays[wk] + '日（週の最低' + e.weeklyDaysMin + '日に' + (e.weeklyDaysMin - s.weekDays[wk]) + '日不足）', '', '', e.id);
         });
       }
       if (e.weeklyHoursCap > 0) {

@@ -559,7 +559,10 @@
         el('td', { text: e.canShift.map(function (id) { var s = Store.stById(id); return s ? s.short || s.name : ''; }).join('/') }),
         el('td', { class: 'right', text: e.minDays + '〜' + e.maxDays + '日' }),
         el('td', { class: 'right', text: e.maxConsecutive + '連勤' }),
-        el('td', { class: 'right', text: e.weeklyDaysCap > 0 ? e.weeklyDaysCap + '日' : '—' }),
+        el('td', { class: 'right', text:
+          (e.weeklyDaysMin > 0 || e.weeklyDaysCap > 0)
+            ? (e.weeklyDaysMin || 0) + '〜' + (e.weeklyDaysCap > 0 ? e.weeklyDaysCap : '') + '日'
+            : '—' }),
         el('td', { class: 'right', text: priorityLabel(e.priority) }),
         el('td', {}, [
           iconOnly('edit', e.name + ' を編集', { onclick: function () { editEmp(e); } }),
@@ -632,7 +635,8 @@
       field('月の最低時間（0＝なし）', input('number', e.minHoursMonth, function (ev) { e.minHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の上限時間（0＝なし）', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の夜勤上限（0＝なし）', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
-      field('入れたい日数/週（0＝なし）', input('number', e.weeklyDaysCap, function (ev) { e.weeklyDaysCap = U.num(ev.target.value, 0, 7, 0); }, { min: 0, max: 7 })),
+      field('週の最低日数（0＝なし）', input('number', e.weeklyDaysMin, function (ev) { e.weeklyDaysMin = U.num(ev.target.value, 0, 7, 0); }, { min: 0, max: 7 })),
+      field('週の最大日数（0＝なし）', input('number', e.weeklyDaysCap, function (ev) { e.weeklyDaysCap = U.num(ev.target.value, 0, 7, 0); }, { min: 0, max: 7 })),
       field('週の上限時間（0＝なし）', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
       field('優先度', select([
         { v: '', t: '未入力' }, { v: 0, t: '0（ふつう）' }, { v: 1, t: '1（優先する）' }
@@ -834,10 +838,12 @@
     }
     var rows = items.map(function (it, i) {
       var guess = Store.guessEmployee(it.obj);
-      it.targetId = guess ? guess.id : '__new__';
+      it.targetId = guess ? guess.id : '';
 
-      var opts = [{ v: '__new__', t: '＋ 新しく登録する（' + (it.obj.name || '名前なし') + '）' }]
-        .concat(D.employees.map(function (e) { return { v: e.id, t: e.name }; }));
+      // 名前が一致しなければ、店長がスタッフ一覧から選ぶ。最後の逃げ道として新規登録も残す
+      var opts = [{ v: '', t: '― スタッフを選ぶ ―' }]
+        .concat(D.employees.map(function (e) { return { v: e.id, t: e.name }; }))
+        .concat([{ v: '__new__', t: '＋ 新しく登録する（' + (it.obj.name || '名前なし') + '）' }]);
       var sel = select(opts, it.targetId, function (ev) { it.targetId = ev.target.value; });
 
       var days = Object.keys(it.obj.avail || {}).length;
@@ -857,7 +863,7 @@
     });
 
     var body = el('div', {}, [
-      el('p', { class: 'hint', text: 'これは誰の希望か確認してください。名前が一致した人は最初から選ばれています。' }),
+      el('p', { class: 'hint', text: '名前が一致した人は最初から選ばれています。一致しなかった人は、スタッフ一覧から選んでください。' }),
       el('table', {}, [
         el('thead', {}, [el('tr', {}, ['データ', '対象月・件数', '誰の希望か'].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
@@ -872,6 +878,7 @@
           var done = [], failed = [];
           items.forEach(function (it) {
             if (it.skip) { failed.push((it.obj.name || it.src) + '：対象月が違います'); return; }
+            if (!it.targetId) { failed.push((it.obj.name || it.src) + '：誰の希望か選ばれていません'); return; }
             try {
               var id = it.targetId;
               if (id === '__new__') id = Store.addEmployee(it.obj.name || '新しい従業員').id;
