@@ -150,7 +150,7 @@ var ShiftImage = (function () {
     // フッター
     g.fillStyle = col.muted; g.font = '12px ' + FONT; g.textAlign = 'left';
     var now = opt.stamp || '';
-    g.fillText('シフト自動作成で作成' + (now ? '（' + now + '）' : ''), C.padX, y + 40);
+    g.fillText('KINMATE で作成' + (now ? '（' + now + '）' : ''), C.padX, y + 40);
 
     return canvas;
   }

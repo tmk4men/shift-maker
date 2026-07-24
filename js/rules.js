@@ -23,7 +23,7 @@ var Rules = (function () {
     { id: 'OPS-A09', cat: 'ops', name: 'お店の休みの日', type: 'hard', params: {}, desc: '定休日・臨時休業日には誰も出勤させない。' },
     { id: 'OPS-003', cat: 'ops', name: '責任者の配置', type: 'hard', params: {}, desc: '責任者必須の勤務区分に責任者を1名以上。' },
     { id: 'OPS-004', cat: 'ops', name: '有資格者の配置', type: 'hard', params: {}, desc: '有資格者必須の勤務区分に有資格者を1名以上。' },
-    { id: 'OPS-006', cat: 'ops', name: '新人だけの勤務にしない', type: 'hard', params: {}, desc: '新人には教育担当者を同じ勤務に同時配置する。' },
+    { id: 'OPS-006', cat: 'ops', name: '新人だけの勤務にしない', type: 'hard', params: {}, desc: '新人には、新人でない人を同じ勤務に必ず一緒に入れます。' },
     { id: 'OPS-008', cat: 'ops', name: '担当できる勤務だけに入れる', type: 'hard', params: {}, desc: '本人ができない勤務区分には入れない。' },
     { id: 'OPS-A06', cat: 'ops', name: '同じ日に2つの勤務を入れない', type: 'hard', params: {}, desc: '1人が同じ日に複数の勤務区分へ重複して入らないようにする。' },
     { id: 'OPS-027', cat: 'ops', name: '勤務と勤務の間をあける', type: 'hard', weight: 0, params: { hours: 11 }, desc: '終業から次の始業まで一定時間を空ける。' },
@@ -43,7 +43,7 @@ var Rules = (function () {
     { id: 'OPS-100', cat: 'ops', name: '組ませない人どうしを避ける', type: 'hard', params: {}, desc: '同じ勤務に入れたくない人どうしを、一緒にしません。' },
     { id: 'OPS-101', cat: 'ops', name: '組ませたい人どうしを優先', type: 'soft', weight: 300, params: {}, desc: '一緒に組ませたい相手がいる勤務を、なるべく選びます。' },
     { id: 'OPS-110', cat: 'ops', name: '人件費予算', type: 'soft', weight: 400, params: {}, desc: '予算を入れているとき、時給の高い人の出番が増えすぎないようにします。' },
-    { id: 'OPS-A01', cat: 'ops', name: '人ごとのシフトの入りやすさ', type: 'soft', weight: 500, params: {}, desc: '多めに入れたい人、控えめにしたい人の設定を反映します。最低出勤日数は必ず守ります。' },
+    { id: 'OPS-A01', cat: 'ops', name: '優先度', type: 'soft', weight: 500, params: {}, desc: '希望が重なったとき、優先度1の人を先に入れます。最低出勤日数は必ず守ります。' },
     { id: 'OPS-A02', cat: 'ops', name: '連勤の抑制', type: 'soft', weight: 150, params: {}, desc: '連勤が長くなるほど避ける。' },
     { id: 'OPS-A03', cat: 'ops', name: '教育ペアの優先', type: 'soft', weight: 800, params: {}, desc: '新人と担当トレーナーを同じ勤務に寄せる。' },
     { id: 'OPS-A04', cat: 'ops', name: '責任者・有資格者を使いすぎない', type: 'soft', weight: 700, params: {}, desc: '責任者や有資格者を、その役割が不要な枠で使い切らないようにする。' },
@@ -352,7 +352,7 @@ var Rules = (function () {
     // 新人は教育担当と同時勤務（枠に既にトレーナーがいること）
     if (on(data, 'OPS-006') && isNewbie(data, e)) {
       var hasTrainer = slot.some(function (o) { return isTrainerFor(ctx, o, empId); });
-      if (!hasTrainer) ng('OPS-006', '新人のため、教育担当者が同じ勤務にいる必要があります');
+      if (!hasTrainer) ng('OPS-006', '新人のため、新人以外の人が同じ勤務に必要です');
     }
 
     // 年収の壁
@@ -369,10 +369,10 @@ var Rules = (function () {
     if (!e.newbie) return false;
     return true;
   }
+  /** 新人と組める人＝新人でない人（教育担当という属性は持たせない） */
   function isTrainerFor(ctx, otherId, newbieId) {
     var o = ctx.emp[otherId];
-    if (!o || o.newbie) return false;
-    return !!(o.trainer || o.leader);
+    return !!(o && !o.newbie);
   }
 
   /* =========================================================

@@ -77,7 +77,7 @@ ok(data.employees.every(e => drawn.indexOf(e.name.slice(0, 3)) >= 0 || drawn.ind
 ok(model.shiftTypes.every(st => drawn.indexOf(st.name.slice(0, 1)) >= 0 || drawn.indexOf(st.short) >= 0),
   '勤務区分の記号が描画される');
 ok(drawn.indexOf('日 / ') >= 0, '日数・時間の集計が描画される');
-ok(drawn.indexOf('シフト自動作成で作成') >= 0, '作成元の記載がある');
+ok(drawn.indexOf('KINMATE で作成') >= 0, '作成元の記載がある');
 
 // 空シフト・0人でも落ちない
 const empty = Store.emptyData();

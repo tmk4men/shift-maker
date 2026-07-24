@@ -136,8 +136,14 @@ function openTab(name) {
 
 /* ---------- 主要な操作 ---------- */
 console.log('\n=== 主要な操作 ===');
+/** ボタンの表示文字。アイコン＋文字にしたので子要素まで拾う */
+function btnText(n) {
+  const self = n._text || '';
+  const kids = n.all ? n.all().map(x => x._text || '').join('') : '';
+  return (self + kids).trim();
+}
 function findButton(panel, text) {
-  return panel.all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf(text) >= 0);
+  return panel.all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf(text) >= 0);
 }
 
 tryRun('［シフトを自動作成］を押す', () => {
@@ -164,7 +170,7 @@ tryRun('欠員対応ダイアログが開く', () => {
     n.tagName === 'TD' && (n.className || '').indexOf('cell-shift') >= 0 && (n.className || '').indexOf('empty') < 0);
   if (!cell) throw new Error('勤務の入ったセルが見つからない');
   cell.click();
-  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('代わりを探す') >= 0);
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('代わりを探す') >= 0);
   if (!b) throw new Error('「代わりを探す」ボタンがない');
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
@@ -241,7 +247,7 @@ tryRun('メニューが開く', () => {
 
 tryRun('メニューから使い方が開ける', () => {
   byId['btnMenu'].click();
-  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === 'はじめての方へ');
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n) === 'はじめての方へ');
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
   if (txt.indexOf('責任者がやること') < 0) throw new Error('使い方が出ない');
@@ -250,7 +256,7 @@ tryRun('メニューから使い方が開ける', () => {
 
 tryRun('メニューから決まりが読める', () => {
   byId['btnMenu'].click();
-  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === 'このアプリの決まり');
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n) === 'このアプリの決まり');
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
   if (txt.indexOf('未入力の日は出勤させません') < 0) throw new Error('固定ルールの説明がない');
@@ -259,7 +265,7 @@ tryRun('メニューから決まりが読める', () => {
 
 tryRun('メニューから初期化できる', () => {
   byId['btnMenu'].click();
-  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('全部消して最初から') >= 0);
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('全部消して最初から') >= 0);
   b.click();
 });
 
@@ -305,9 +311,9 @@ tryRun('スタッフが入力 → コード化 → 責任者が取り込む', ()
   if (!nameInput) throw new Error('名前欄がない');
   nameInput.value = '田中 店長';
   nameInput.fire('input', { target: nameInput });
-  const allOk = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('全部「終日OK」') >= 0);
+  const allOk = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('全部「終日OK」') >= 0);
   allOk.click();
-  const codeBtn = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('コードをコピー') >= 0);
+  const codeBtn = byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードをコピー') >= 0);
   codeBtn.click();
   const ta = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
   if (!ta) throw new Error('コード欄がない。alert=' + JSON.stringify(alerted.slice(-2)));
@@ -323,18 +329,69 @@ tryRun('スタッフが入力 → コード化 → 責任者が取り込む', ()
   sandbox.Store.save();
   setMode('manage');
   openTab('request');
-  const imp = byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('コードを貼り付けて取り込む') >= 0);
+  const imp = byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードを貼り付けて取り込む') >= 0);
   if (!imp) throw new Error('取り込みボタンがない');
   imp.click();
   const ta2 = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA');
   ta2.value = code;
-  const next = byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && (n._text || '') === '確認へ進む');
+  const next = byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && btnText(n) === '確認へ進む');
   next.click();
 
+  // 登録済みの氏名と一致するので、確認を挟まずそのまま入る
+  const d2 = sandbox.Store.get();
+  const filled = Object.keys(d2.avail['e1'] || {}).length;
+  if (!filled) throw new Error('氏名が一致しても自動で取り込まれない');
+  if (d2.submissions['e1'].status !== 'submitted') throw new Error('提出済みにならない');
+});
+
+tryRun('知らない名前のときは、誰の希望か確認してから取り込む', () => {
+  sandbox.Store.loadDemo();
+  setMode('input');
+  const panel = byId['panel-input'];
+  const nameInput = panel.all().find(n => n.tagName === 'INPUT' && n.attrs.type === 'text');
+  nameInput.value = 'まだ登録していない人';
+  nameInput.fire('input', { target: nameInput });
+  panel.all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('全部「終日OK」') >= 0).click();
+  byId['panel-input'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードをコピー') >= 0).click();
+  const code = byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA').value;
+
+  const draft = JSON.parse(store['shift-input-draft'] || '{}');
+  sandbox.Store.get().settings.year = draft.year;
+  sandbox.Store.get().settings.month = draft.month;
+  sandbox.Store.save();
+  setMode('manage');
+  openTab('request');
+  byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('コードを貼り付けて取り込む') >= 0).click();
+  byId['modalBody'].all().find(n => n.tagName === 'TEXTAREA').value = code;
+  byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && btnText(n) === '確認へ進む').click();
+
   const sel = byId['modalBody'].all().find(n => n.tagName === 'SELECT');
-  if (!sel) throw new Error('担当者のプルダウンが出ない');
-  const chosen = sel.children.filter(o => o.selected).map(o => o.attrs.value);
-  if (chosen[0] !== 'e1') throw new Error('氏名一致で本人が選ばれない: ' + chosen[0]);
+  if (!sel) throw new Error('知らない名前なのに確認のプルダウンが出ない');
+});
+
+tryRun('時給と扶養の設定は、本人の希望と一緒に届く', () => {
+  sandbox.Store.loadDemo();
+  const emp = sandbox.Store.get().employees[0];
+  const obj = {
+    t: 'shift-submission', v: 1, name: emp.name, id: '',
+    ym: sandbox.Store.get().settings.year + '-' + String(sandbox.Store.get().settings.month).padStart(2, '0'),
+    wage: 1234, incomeCap: 1030000, ytdEarnings: 456000, avail: {}, requests: {}
+  };
+  sandbox.Store.importSubmission(obj, emp.id);
+  const after = sandbox.Store.empById(emp.id);
+  if (after.wage !== 1234) throw new Error('時給が反映されない: ' + after.wage);
+  if (after.incomeCap !== 1030000) throw new Error('年収上限が反映されない: ' + after.incomeCap);
+  if (after.ytdEarnings !== 456000) throw new Error('累計賃金が反映されない: ' + after.ytdEarnings);
+
+  // 店長の編集画面には出さない
+  openTab('staff');
+  findButton(byId['panel-staff'], '編集').click();
+  const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
+  ['時給', '年収上限', '責任者', '有資格者', '教育担当']
+    .forEach(t => { if (txt.indexOf(t) >= 0) throw new Error('店長側に「' + t + '」が残っている'); });
+  ['新人', '18歳未満', '優先度'].forEach(t => {
+    if (txt.indexOf(t) < 0) throw new Error('「' + t + '」が見つからない');
+  });
 });
 
 tryRun('モードは保存され、開き直しても続く', () => {
@@ -347,7 +404,7 @@ tryRun('モードは保存され、開き直しても続く', () => {
 tryRun('スタッフへの渡し方の案内が出る', () => {
   setMode('manage');
   openTab('request');
-  const b = byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && (n._text || '').indexOf('スタッフへの渡し方') >= 0);
+  const b = byId['panel-request'].all().find(n => n.tagName === 'BUTTON' && btnText(n).indexOf('スタッフへの渡し方') >= 0);
   if (!b) throw new Error('案内ボタンがない');
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ');
@@ -396,7 +453,7 @@ tryRun('休み希望は最初から必ず通す（設定で弱められない）
 
 tryRun('アプリのURLはどこにも出さない', () => {
   byId['btnMenu'].click();
-  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && (n._text || '') === 'スタッフへの渡し方');
+  const b = byId['modalBody'].all().find(n => n.tagName === 'BUTTON' && btnText(n) === 'スタッフへの渡し方');
   b.click();
   const txt = byId['modalBody'].all().map(n => n._text || '').join(' ')
     + byId['modalBody'].all().map(n => n.value || '').join(' ')
@@ -464,7 +521,7 @@ tryRun('自動で登録された人が、見本の店長の時給を引き継が
 tryRun('［＋従業員を追加］も同じ初期値で作られる', () => {
   openTab('staff');
   const before = sandbox.Store.get().employees.length;
-  findButton(byId['panel-staff'], '＋ 従業員を追加').click();
+  findButton(byId['panel-staff'], '従業員を追加').click();
   const list = sandbox.Store.get().employees;
   if (list.length !== before + 1) throw new Error('追加されていない');
   const e = list[list.length - 1];
@@ -486,9 +543,9 @@ tryRun('Esc でダイアログが閉じる', () => {
 tryRun('追加した従業員は、キャンセルすると登録ごと取り消される', () => {
   openTab('staff');
   const before = sandbox.Store.get().employees.length;
-  findButton(byId['panel-staff'], '＋ 従業員を追加').click();
+  findButton(byId['panel-staff'], '従業員を追加').click();
   if (sandbox.Store.get().employees.length !== before + 1) throw new Error('追加されていない');
-  const cancel = byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && (n._text || '') === 'キャンセル');
+  const cancel = byId['modalFoot'].children.find(n => n.tagName === 'BUTTON' && btnText(n) === 'キャンセル');
   if (!cancel) throw new Error('キャンセルボタンがない');
   cancel.click();
   if (sandbox.Store.get().employees.length !== before)

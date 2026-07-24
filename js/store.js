@@ -351,6 +351,7 @@ var Store = (function () {
     return {
       t: 'shift-submission', v: 1, name: e.name, id: empId,
       ym: d.settings.year + '-' + U.pad(d.settings.month),
+      wage: e.wage || 0, incomeCap: e.incomeCap || 0, ytdEarnings: e.ytdEarnings || 0,
       avail: d.avail[empId] || {}, requests: d.requests[empId] || {}
     };
   }
@@ -395,6 +396,10 @@ var Store = (function () {
     if (obj.ym && obj.ym !== ym) throw new Error('対象月が違います（提出コードは ' + obj.ym + '）');
     d.avail[e.id] = obj.avail || {};
     d.requests[e.id] = obj.requests || {};
+    // 時給と扶養の設定は本人が出す（店長側では入力しない）
+    if (obj.wage > 0) e.wage = +obj.wage;
+    if (obj.incomeCap !== undefined) e.incomeCap = +obj.incomeCap || 0;
+    if (obj.ytdEarnings !== undefined) e.ytdEarnings = +obj.ytdEarnings || 0;
     d.submissions[e.id] = { status: 'submitted', at: '取込' };
     save();
     return e;

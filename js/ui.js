@@ -206,6 +206,65 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
 
+  /* ---------- アイコン ----------
+     文字記号（✕ ＋ ◀ ▶）は環境で形が変わり、読み上げでも意味が出ない。
+     同じ太さ・同じ丸みの線画にそろえ、意味は aria-label 側で伝える。 */
+  var ICON_PATH = {
+    plus: 'M12 5v14M5 12h14',
+    close: 'M6 6l12 12M18 6L6 18',
+    prev: 'M15 5l-7 7 7 7',
+    next: 'M9 5l7 7-7 7',
+    check: 'M4 12.5l5.5 5.5L20 7',
+    download: 'M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16',
+    share: 'M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4',
+    copy: 'M9 9h10v10H9zM5 15V5h10',
+    print: 'M7 9V4h10v5M7 18H5v-6h14v6h-2M7 15h10v5H7z',
+    image: 'M4 5h16v14H4zM4 16l4.5-4.5 3 3L15 11l5 5',
+    trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
+    edit: 'M4 20h4L19 9l-4-4L4 16z',
+    calendar: 'M4 6h16v14H4zM4 10h16M8 4v4M16 4v4',
+    people: 'M8 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5M17 20c0-2.6-1-4.4-2.5-5.4M16 5.2a3.2 3.2 0 010 6'
+  };
+
+  /** 線画アイコン。文字と並べるときは装飾なので読み上げ対象から外す */
+  function icon(name, opt) {
+    opt = opt || {};
+    var svg = document.createElementNS
+      ? document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      : document.createElement('svg');
+    function set(k, v) { if (svg.setAttribute) svg.setAttribute(k, v); }
+    set('viewBox', '0 0 24 24');
+    set('width', opt.size || 18);
+    set('height', opt.size || 18);
+    set('fill', 'none');
+    set('stroke', 'currentColor');
+    set('stroke-width', '2');
+    set('stroke-linecap', 'round');
+    set('stroke-linejoin', 'round');
+    set('aria-hidden', 'true');
+    set('focusable', 'false');
+    set('class', 'ico');
+    var path = document.createElementNS
+      ? document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      : document.createElement('path');
+    if (path.setAttribute) path.setAttribute('d', ICON_PATH[name] || '');
+    if (svg.appendChild) svg.appendChild(path);
+    return svg;
+  }
+
+  /** アイコン＋文字のボタン。文字は残す（アイコンだけだと意味が伝わらないため） */
+  function iconBtn(name, label, attrs) {
+    var a = Object.assign({ class: 'btn' }, attrs || {});
+    var b = el('button', a, [icon(name), el('span', { text: label })]);
+    return b;
+  }
+
+  /** アイコンだけの小さなボタン。必ず名前を付ける */
+  function iconOnly(name, ariaLabel, attrs) {
+    var a = Object.assign({ class: 'btn ghost sm icon-only', 'aria-label': ariaLabel, title: ariaLabel }, attrs || {});
+    return el('button', a, [icon(name, { size: 16 })]);
+  }
+
   function field(label, input) { return el('div', { class: 'field' }, [el('label', { text: label }), input]); }
   function input(type, value, oninput, attrs) {
     var a = Object.assign({ type: type, value: value === undefined ? '' : value, oninput: oninput }, attrs || {});
@@ -358,9 +417,9 @@
           ? s.closedDates.map(function (d) {
             return el('span', { class: 'chip' }, [
               d + '（' + U.WD[U.weekdayOf(d)] + '）',
-              el('button', {
-                class: 'btn ghost sm', style: 'margin-left:6px;min-height:24px;padding:0 8px',
-                text: '✕', 'aria-label': d + ' の臨時休業をやめる', onclick: function () {
+              iconOnly('close', d + ' の臨時休業をやめる', {
+                style: 'margin-left:6px;min-height:24px;padding:0 6px',
+                onclick: function () {
                   s.closedDates = s.closedDates.filter(function (x) { return x !== d; });
                   saveAndRender();
                 }
@@ -387,8 +446,8 @@
         el('td', { class: 'nowrap', text: U.min2h(c.work) + 'h' }),
         el('td', { class: 'nowrap', text: c.night > 0 ? U.min2h(c.night) + 'h' : '—' }),
         el('td', {}, [warn ? el('span', { class: 'badge ng', text: warn }) : el('span', { class: 'badge ok', text: 'OK' })]),
-        el('td', {}, [el('button', {
-          class: 'btn ghost sm danger', text: '削除', onclick: function () {
+        el('td', {}, [iconBtn('trash', '削除', {
+          class: 'btn ghost sm danger', onclick: function () {
             if (D.shiftTypes.length <= 1) return toast('最低1つは必要です');
             if (!confirm(st.name + ' を削除します。\n作成済みシフトのこの勤務、必要人数の設定、各人の「担当できる勤務区分」からも削除されます。よろしいですか？')) return;
             Store.removeShiftType(st.id); D = Store.get(); render();
@@ -402,8 +461,8 @@
         el('thead', {}, [el('tr', {}, ['名称', '略', '開始', '終了', '休憩(分)', '色', '実働', '深夜', '休憩チェック', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, stRows)
       ])]),
-      el('div', { style: 'margin-top:10px' }, [el('button', {
-        class: 'btn sm', text: '＋ 勤務区分を追加', onclick: function () {
+      el('div', { style: 'margin-top:10px' }, [iconBtn('plus', '勤務区分を追加', {
+        class: 'btn sm', onclick: function () {
           var id = 'S' + (D.shiftTypes.length + 1) + Math.floor(Math.random() * 90 + 10);
           D.shiftTypes.push({ id: id, name: '新しい勤務', short: '新', start: '09:00', end: '18:00', breakMin: 60, color: '#b0bec5' });
           D.demand.byWeekday[id] = [0, 0, 0, 0, 0, 0, 0];
@@ -417,17 +476,13 @@
     /* 必要人数 */
     var head = el('tr', {}, [el('th', { text: '勤務区分' })].concat(U.WD.map(function (w, i) {
       return el('th', { class: i === 0 ? 'sun' : i === 6 ? 'sat' : '', text: w });
-    })).concat([el('th', { text: '責任者必須' }), el('th', { text: '有資格者必須' })]));
+    })));
 
     var rows = D.shiftTypes.map(function (st) {
       var arr = D.demand.byWeekday[st.id] || (D.demand.byWeekday[st.id] = [0, 0, 0, 0, 0, 0, 0]);
-      var rr = D.demand.roleReq[st.id] || (D.demand.roleReq[st.id] = {});
       return el('tr', {}, [el('td', { text: st.name })].concat(arr.map(function (v, i) {
         return el('td', {}, [input('number', v, function (e) { arr[i] = U.num(e.target.value, 0, 99, 0); Store.save(); }, { style: 'width:56px', min: 0, max: 99 })]);
-      })).concat([
-        el('td', {}, [checkbox('', rr.leader, function (e) { rr.leader = e.target.checked; Store.save(); })]),
-        el('td', {}, [checkbox('', rr.certified, function (e) { rr.certified = e.target.checked; Store.save(); })])
-      ]));
+      })));
     });
 
     p.appendChild(card('必要人数（曜日別）', null, [
@@ -464,23 +519,18 @@
 
     var rows = D.employees.map(function (e) {
       var chips = [];
-      if (e.leader) chips.push(el('span', { class: 'chip leader', text: '責任者' }));
-      if (e.certified) chips.push(el('span', { class: 'chip cert', text: '有資格' }));
-      if (e.trainer) chips.push(el('span', { class: 'chip trainer', text: '教育担当' }));
       if (e.newbie) chips.push(el('span', { class: 'chip newbie', text: '新人' }));
       if (e.minor) chips.push(el('span', { class: 'chip minor', text: '18歳未満' }));
       return el('tr', {}, [
         el('td', {}, [el('strong', { text: e.name })].concat(el('div', {}, chips))),
-        el('td', { class: 'right', text: U.yen(e.wage) }),
         el('td', { text: e.canShift.map(function (id) { var s = Store.stById(id); return s ? s.short || s.name : ''; }).join('/') }),
         el('td', { class: 'right', text: e.minDays + '〜' + e.maxDays + '日' }),
         el('td', { class: 'right', text: e.maxConsecutive + '連勤' }),
-        el('td', { class: 'right', text: e.priority > 0 ? '+' + e.priority : String(e.priority) }),
-        el('td', { class: 'right nowrap', text: e.incomeCap > 0 ? U.yen(e.incomeCap) : '—' }),
+        el('td', { class: 'right', text: priorityLabel(e.priority) }),
         el('td', {}, [
-          el('button', { class: 'btn ghost sm', text: '編集', onclick: function () { editEmp(e); } }),
-          el('button', {
-            class: 'btn ghost sm danger', text: '削除', onclick: function () {
+          iconBtn('edit', '編集', { class: 'btn ghost sm', onclick: function () { editEmp(e); } }),
+          iconBtn('trash', '削除', {
+            class: 'btn ghost sm danger', onclick: function () {
               if (!confirm(e.name + ' さんを削除します。\n作成済みシフト・希望・提出内容・相性設定からも削除されます。よろしいですか？')) return;
               Store.removeEmployee(e.id); D = Store.get(); render();
             }
@@ -489,13 +539,13 @@
       ]);
     });
 
-    p.appendChild(card('従業員', '「入りやすさ」をマイナスにしても、最低出勤日数は必ず守ります。', [
+    p.appendChild(card('従業員', '時給と扶養の設定は、本人がシフト希望と一緒に送ってきます。', [
       el('div', { class: 'scroll' }, [el('table', {}, [
-        el('thead', {}, [el('tr', {}, ['氏名 / 属性', '時給', '担当可能', '出勤日数', '連勤上限', '入りやすさ', '年収上限', ''].map(function (h) { return el('th', { text: h }); }))]),
+        el('thead', {}, [el('tr', {}, ['氏名 / 属性', '担当可能', '出勤日数', '連勤上限', '優先度', ''].map(function (h) { return el('th', { text: h }); }))]),
         el('tbody', {}, rows)
       ])]),
-      el('div', { style: 'margin-top:12px' }, [el('button', {
-        class: 'btn', text: '＋ 従業員を追加', onclick: function () {
+      el('div', { style: 'margin-top:12px' }, [iconBtn('plus', '従業員を追加', {
+        class: 'btn', onclick: function () {
           var e = Store.addEmployee('');   // 初期値の決め方は Store に一本化する
           D = Store.get(); editEmp(e, true);
         }
@@ -503,23 +553,26 @@
     ]));
   }
 
+  /** 優先度は 未入力 / 0 / 1 の3つだけ */
+  function priorityLabel(v) {
+    if (v === '' || v === null || v === undefined) return '未入力';
+    return +v > 0 ? '優先' : 'ふつう';
+  }
+
   /** isNew … 追加ボタンから開いた場合。キャンセルされたら登録ごと取り消す */
   function editEmp(e, isNew) {
     var b = el('div', {}, []);
     b.appendChild(el('div', { class: 'row' }, [
-      field('氏名', input('text', e.name, function (ev) { e.name = ev.target.value; })),
-      field('時給', input('number', e.wage, function (ev) { e.wage = U.num(ev.target.value, 0, 100000, 0); }, { step: 10, min: 0 })),
-      field('雇用区分', select([{ v: 'full', t: '正社員' }, { v: 'part', t: 'パート/アルバイト' }, { v: 'student', t: '学生' }, { v: 'contract', t: '契約' }], e.employment, function (ev) { e.employment = ev.target.value; }))
+      field('氏名', input('text', e.name, function (ev) { e.name = ev.target.value; }))
     ]));
 
     b.appendChild(el('h4', { text: '属性', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, [
-      checkbox('責任者', e.leader, function (ev) { e.leader = ev.target.checked; }),
-      checkbox('有資格者', e.certified, function (ev) { e.certified = ev.target.checked; }),
-      checkbox('教育担当（新人と組める）', e.trainer, function (ev) { e.trainer = ev.target.checked; }),
-      checkbox('新人（要ペア勤務）', e.newbie, function (ev) { e.newbie = ev.target.checked; }),
+      checkbox('新人', e.newbie, function (ev) { e.newbie = ev.target.checked; }),
       checkbox('18歳未満', e.minor, function (ev) { e.minor = ev.target.checked; })
     ]));
+    b.appendChild(el('p', { class: 'hint', text:
+      '新人は、新人でない人と必ず同じ勤務にします。18歳未満は、深夜勤務と時間外を法律どおり禁止します。' }));
 
     b.appendChild(el('h4', { text: '担当できる勤務区分', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row' }, D.shiftTypes.map(function (st) {
@@ -546,40 +599,68 @@
       field('月の上限時間（0＝なし）', input('number', e.maxHoursMonth, function (ev) { e.maxHoursMonth = U.num(ev.target.value, 0, 744, 0); }, { min: 0 })),
       field('月の夜勤上限（0＝なし）', input('number', e.maxNights, function (ev) { e.maxNights = U.num(ev.target.value, 0, 31, 0); }, { min: 0 })),
       field('週の上限時間（0＝なし）', input('number', e.weeklyHoursCap, function (ev) { e.weeklyHoursCap = U.num(ev.target.value, 0, 80, 0); }, { min: 0, max: 80 })),
-      field('シフトの入りやすさ', select([-3, -2, -1, 0, 1, 2, 3].map(function (v) {
-        return { v: v, t: v > 0 ? '+' + v + '（多めに）' : v < 0 ? v + '（控えめに）' : '0（標準）' };
-      }), e.priority, function (ev) { e.priority = +ev.target.value; }))
+      field('優先度', select([
+        { v: '', t: '未入力' }, { v: 0, t: '0（ふつう）' }, { v: 1, t: '1（優先する）' }
+      ], e.priority === '' || e.priority === null || e.priority === undefined ? '' : e.priority,
+        function (ev) { e.priority = ev.target.value === '' ? '' : +ev.target.value; }))
     ]));
-
-
-    b.appendChild(el('h4', { text: '年収の壁（扶養内で働きたい人）', style: 'margin-top:14px' }));
-    b.appendChild(el('div', { class: 'row' }, [
-      field('年収上限（0＝なし）', input('number', e.incomeCap, function (ev) { e.incomeCap = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 })),
-      field('年初からの累計賃金', input('number', e.ytdEarnings, function (ev) { e.ytdEarnings = U.num(ev.target.value, 0, 1e9, 0); }, { step: 10000 }))
-    ]));
+    b.appendChild(el('p', { class: 'hint', text:
+      '優先度は、希望が重なったときに誰を先に入れるかの目安です。1にした人が先に入ります。' }));
 
     var others = D.employees.filter(function (x) { return x.id !== e.id; });
-    b.appendChild(el('h4', { text: '人間関係・教育', style: 'margin-top:14px' }));
-    b.appendChild(el('div', { class: 'row' }, [
-      field('担当トレーナー（新人の場合）', select([{ v: '', t: '指定なし' }].concat(others.map(function (o) { return { v: o.id, t: o.name }; })), e.trainerId, function (ev) { e.trainerId = ev.target.value; }))
-    ]));
-    b.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [
-      el('div', { class: 'field grow' }, [el('label', { text: '同じ勤務にできない人（相性NG）' }),
-      el('div', { class: 'row' }, others.map(function (o) {
-        return checkbox(o.name, e.ngPartners.indexOf(o.id) >= 0, function (ev) {
-          if (ev.target.checked) { if (e.ngPartners.indexOf(o.id) < 0) e.ngPartners.push(o.id); }
-          else e.ngPartners = e.ngPartners.filter(function (x) { return x !== o.id; });
+
+    /** 相手をプルダウンで選んで足す。選んだ人は下に並び、✕ で外せる */
+    function partnerPicker(label, hint, list) {
+      var box = el('div', { class: 'field grow' }, [el('label', { text: label })]);
+      var chosen = el('div', { class: 'row', style: 'margin-top:6px' }, []);
+
+      function paint() {
+        chosen.innerHTML = '';
+        if (!list.length) { chosen.appendChild(el('span', { class: 'muted', text: 'なし' })); return; }
+        list.forEach(function (id) {
+          var o = Store.empById(id);
+          chosen.appendChild(el('span', { class: 'chip' }, [
+            (o ? o.name : id),
+            iconOnly('close', (o ? o.name : id) + ' を外す', {
+              style: 'margin-left:6px;min-height:24px;padding:0 6px',
+              onclick: function () { list.splice(list.indexOf(id), 1); paint(); refill(); }
+            })
+          ]));
         });
-      }))])
-    ]));
+      }
+
+      var sel = select([], '', null);
+      function refill() {
+        sel.innerHTML = '';
+        var rest = others.filter(function (o) { return list.indexOf(o.id) < 0; });
+        sel.appendChild(el('option', { value: '', text: rest.length ? '選んでください' : '選べる人がいません' }));
+        rest.forEach(function (o) { sel.appendChild(el('option', { value: o.id, text: o.name })); });
+        sel.disabled = !rest.length;
+      }
+      refill();
+
+      box.appendChild(el('div', { class: 'row' }, [
+        sel,
+        el('button', {
+          class: 'btn ghost sm', text: '追加', onclick: function () {
+            if (!sel.value) return;
+            if (list.indexOf(sel.value) < 0) list.push(sel.value);
+            paint(); refill();
+          }
+        })
+      ]));
+      box.appendChild(chosen);
+      if (hint) box.appendChild(el('p', { class: 'hint', style: 'margin-top:4px', text: hint }));
+      paint();
+      return box;
+    }
+
+    b.appendChild(el('h4', { text: '組み合わせ', style: 'margin-top:14px' }));
     b.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [
-      el('div', { class: 'field grow' }, [el('label', { text: 'できれば一緒に組ませたい人（相性◎）' }),
-      el('div', { class: 'row' }, others.map(function (o) {
-        return checkbox(o.name, e.goodPartners.indexOf(o.id) >= 0, function (ev) {
-          if (ev.target.checked) { if (e.goodPartners.indexOf(o.id) < 0) e.goodPartners.push(o.id); }
-          else e.goodPartners = e.goodPartners.filter(function (x) { return x !== o.id; });
-        });
-      }))])
+      partnerPicker('同じ勤務にできない人', '選んだ人とは同じ勤務にしません。', e.ngPartners)
+    ]));
+    b.appendChild(el('div', { class: 'row', style: 'margin-top:12px' }, [
+      partnerPicker('できれば同じ勤務にしたい人', '可能なときは同じ勤務にします。', e.goodPartners)
     ]));
 
     b.appendChild(el('div', { class: 'row', style: 'margin-top:12px' }, [
@@ -716,6 +797,23 @@
     }
 
     var ym = D.settings.year + '-' + U.pad(D.settings.month);
+
+    /* 登録済みの氏名と一致していて、対象月も合っていれば、確認を挟まずそのまま入れる。
+       毎回プルダウンで「これは誰か」を選ばせる必要はない。 */
+    if (!ngList.length) {
+      var auto = items.filter(function (it) {
+        return (!it.obj.ym || it.obj.ym === ym) && !!Store.guessEmployee(it.obj);
+      });
+      if (auto.length === items.length) {
+        var names = [], ng2 = [];
+        auto.forEach(function (it) {
+          try { names.push(Store.importSubmission(it.obj, Store.guessEmployee(it.obj).id).name); }
+          catch (err) { ng2.push((it.obj.name || it.src) + '：' + err.message); }
+        });
+        D = Store.get(); render();
+        if (!ng2.length) { toast(names.join('、') + ' さんの希望を取り込みました'); return; }
+      }
+    }
     var rows = items.map(function (it, i) {
       var guess = Store.guessEmployee(it.obj);
       it.targetId = guess ? guess.id : '__new__';
@@ -939,8 +1037,8 @@
       });
 
       b.appendChild(el('div', { style: 'margin-top:10px' }, [
-        el('button', {
-          class: 'btn ghost sm', text: '＋ 時間帯を増やす',
+        iconBtn('plus', '時間帯を増やす', {
+          class: 'btn ghost sm',
           onclick: function () {
             var last = slots[slots.length - 1];
             slots.push({ from: last ? last.to : '09:00', to: '22:00' });
@@ -967,8 +1065,8 @@
     var idx = U.monthDates(cfg.year, cfg.month).indexOf(date);
     var all = U.monthDates(cfg.year, cfg.month);
     var foot = [];
-    if (idx > 0) foot.push(el('button', { class: 'btn ghost', text: '◀ 前の日', onclick: function () { cfg.after(); dayBox(cfg, all[idx - 1]); } }));
-    if (idx < all.length - 1) foot.push(el('button', { class: 'btn ghost', text: '次の日 ▶', onclick: function () { cfg.after(); dayBox(cfg, all[idx + 1]); } }));
+    if (idx > 0) foot.push(iconBtn('prev', '前の日', { class: 'btn ghost', onclick: function () { cfg.after(); dayBox(cfg, all[idx - 1]); } }));
+    if (idx < all.length - 1) foot.push(iconBtn('next', '次の日', { class: 'btn ghost', onclick: function () { cfg.after(); dayBox(cfg, all[idx + 1]); } }));
     foot.push(el('button', { class: 'btn', text: '閉じる', onclick: function () { cfg.after(); closeModal(); } }));
 
     modal(title, b, foot);
@@ -1104,9 +1202,9 @@
     var res = D.lastResult;
 
     var head = el('div', { class: 'row', style: 'margin-bottom:8px;align-items:center' }, [
-      el('button', { class: 'btn ghost sm', text: '◀ 前月', onclick: function () { moveMonth(-1); } }),
+      iconBtn('prev', '前月', { class: 'btn ghost sm', onclick: function () { moveMonth(-1); } }),
       el('strong', { style: 'font-size:16px', text: D.settings.year + '年 ' + D.settings.month + '月' }),
-      el('button', { class: 'btn ghost sm', text: '翌月 ▶', onclick: function () { moveMonth(1); } }),
+      iconBtn('next', '翌月', { class: 'btn ghost sm', onclick: function () { moveMonth(1); } }),
       el('span', { style: 'width:12px' }),
       el('button', { class: 'btn big', text: 'シフトを自動作成', onclick: doGenerate }),
       el('button', {
@@ -1117,10 +1215,10 @@
           D.lastResult = null; saveAndRender();
         }
       }),
-      el('button', { class: 'btn', text: '画像で保存', onclick: exportImage }),
-      el('button', { class: 'btn ghost', text: 'CSV出力', onclick: exportCsv }),
-      el('button', {
-        class: 'btn ghost', text: '印刷', onclick: function () {
+      iconBtn('image', '画像で保存', { onclick: exportImage }),
+      iconBtn('download', 'CSV出力', { class: 'btn ghost', onclick: exportCsv }),
+      iconBtn('print', '印刷', {
+        class: 'btn ghost', onclick: function () {
           if (typeof window !== 'undefined' && window.print) window.print();
         }
       })
@@ -1238,17 +1336,13 @@
       if (!need) return;
       var n = D.employees.filter(function (e) { return (e.canShift || []).indexOf(st.id) >= 0; }).length;
       if (n === 0) out.push({ level: 'ng', msg: st.name + 'を担当できる人が1人もいません', hint: '「② 従業員」の「担当できる勤務区分」を確認してください' });
-      var rr = (D.demand.roleReq || {})[st.id] || {};
-      if (rr.leader && !D.employees.some(function (e) { return e.leader && (e.canShift || []).indexOf(st.id) >= 0; }))
-        out.push({ level: 'ng', msg: st.name + 'は責任者必須ですが、担当できる責任者がいません' });
-      if (rr.certified && !D.employees.some(function (e) { return e.certified && (e.canShift || []).indexOf(st.id) >= 0; }))
-        out.push({ level: 'ng', msg: st.name + 'は有資格者必須ですが、担当できる有資格者がいません' });
+
     });
 
     // 新人に対する教育担当
     var newbies = D.employees.filter(function (e) { return e.newbie; });
-    if (newbies.length && !D.employees.some(function (e) { return (e.trainer || e.leader) && !e.newbie; }))
-      out.push({ level: 'ng', msg: '新人がいますが、教育担当（またはリーダー）が誰も登録されていません', hint: '新人を配置できず、勤務が入りません' });
+    if (newbies.length && !D.employees.some(function (e) { return !e.newbie; }))
+      out.push({ level: 'ng', msg: '登録されているのが新人だけです', hint: '新人は新人以外と組ませるため、このままでは勤務が入りません' });
 
     // 休憩不足
     D.shiftTypes.forEach(function (st) {
@@ -1701,7 +1795,9 @@
   function renderRules() {
     var p = document.getElementById('panel-setup');
     // 法令ルールは常に有効で変更できない。設定として並べても押せないので出さない。
-    var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock && d.id !== 'OPS-110'; });
+    // 設定する場所をなくしたルールは、調整欄にも出さない
+    var HIDDEN = { 'OPS-110': 1, 'OPS-003': 1, 'OPS-004': 1, 'OPS-A03': 1, 'OPS-A04': 1 };
+    var editable = Rules.DEFS.filter(function (d) { return !Rules.cfg(D, d.id).lock && !HIDDEN[d.id]; });
 
 
     function ruleRow(d) {
@@ -1760,7 +1856,8 @@
     var now = new Date();
     var y = now.getFullYear(), m = now.getMonth() + 2;      // 既定は翌月
     if (m > 12) { m = 1; y++; }
-    inputDraft = saved && saved.avail ? saved : { name: '', year: y, month: m, avail: {}, requests: {} };
+    inputDraft = saved && saved.avail ? saved
+      : { name: '', year: y, month: m, wage: '', incomeCap: 0, ytdEarnings: '', avail: {}, requests: {} };
     return inputDraft;
   }
   function saveDraft() {
@@ -1787,6 +1884,21 @@
         field('月', select([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (mm) { return { v: mm, t: mm + '月' }; }), dr.month,
           function (e) { dr.month = +e.target.value; saveDraft(); render(); }))
       ]),
+      el('div', { class: 'row', style: 'margin-top:12px' }, [
+        field('あなたの時給', liveInput('number', dr.wage === undefined ? '' : dr.wage,
+          function (v) { dr.wage = U.num(v, 0, 100000, 0); }, { step: 10, min: 0, placeholder: '例）1100' })),
+        field('扶養の範囲で働きたい', select([
+          { v: '', t: 'いいえ／わからない' },
+          { v: '1030000', t: 'はい（103万円まで）' },
+          { v: '1230000', t: 'はい（123万円まで）' },
+          { v: '1300000', t: 'はい（130万円まで）' },
+          { v: '1500000', t: 'はい（150万円まで）' }
+        ], String(dr.incomeCap || ''), function (e) { dr.incomeCap = +e.target.value || 0; saveDraft(); render(); }))
+      ]),
+      dr.incomeCap > 0 ? el('div', { class: 'row', style: 'margin-top:8px' }, [
+        field('今年すでに稼いだ金額', liveInput('number', dr.ytdEarnings === undefined ? '' : dr.ytdEarnings,
+          function (v) { dr.ytdEarnings = U.num(v, 0, 1e9, 0); }, { step: 10000, min: 0, placeholder: '例）620000' }))
+      ]) : null,
       el('div', { class: 'row', style: 'margin-top:12px' }, [
         el('button', {
           class: 'btn ghost sm', text: '全部「終日OK」', onclick: function () {
@@ -1823,9 +1935,9 @@
 
     p.appendChild(card('できたら責任者に送る', '入力した内容は残るので、途中で閉じても続きからできます。', [
       el('div', { class: 'row' }, [
-        el('button', { class: 'btn big', text: 'LINEなどで送る', onclick: shareInputCode }),
-        el('button', { class: 'btn ghost', text: 'コードをコピー', onclick: copyInputCode }),
-        el('button', { class: 'btn ghost', text: 'ファイルに保存', onclick: saveInputFile })
+        iconBtn('share', 'LINEなどで送る', { class: 'btn big', onclick: shareInputCode }),
+        iconBtn('copy', 'コードをコピー', { class: 'btn ghost', onclick: copyInputCode }),
+        iconBtn('download', 'ファイルに保存', { class: 'btn ghost', onclick: saveInputFile })
       ]),
       el('p', { class: 'hint', style: 'margin-top:8px', text: '責任者は、送られた文をそのまま貼り付けるだけで取り込めます。' })
     ]));
@@ -1837,6 +1949,9 @@
     return {
       t: 'shift-submission', v: 1, name: dr.name.trim(), id: '',
       ym: dr.year + '-' + U.pad(dr.month),
+      wage: U.num(dr.wage, 0, 100000, 0),
+      incomeCap: U.num(dr.incomeCap, 0, 1e9, 0),
+      ytdEarnings: U.num(dr.ytdEarnings, 0, 1e9, 0),
       avail: dr.avail, requests: dr.requests
     };
   }

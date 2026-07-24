@@ -73,10 +73,20 @@ function audit(data, assignments) {
       const av = (data.avail[e.id] || {})[date];
       if (av) {
         if (av.off) errs.push(`${e.name}: 本人が不可と提出した日に割当 (${date})`);
-        else if (av.from) {
-          let af = U.hm2min(av.from), at = U.hm2min(av.to);
-          if (at <= af) at += 1440;
-          if (c.start < af || c.end > at) errs.push(`${e.name}: 提出時間(${av.from}-${av.to})外の${st.name} (${date})`);
+        else if (!av.allday) {
+          // 出せる時間帯は1日に複数持てる。どれか1つに収まっていればよい
+          const slots = av.slots && av.slots.length ? av.slots : (av.from ? [av] : []);
+          if (slots.length) {
+            const fits = slots.some(sl => {
+              let af = U.hm2min(sl.from), at = U.hm2min(sl.to);
+              if (at <= af) at += 1440;
+              return c.start >= af && c.end <= at;
+            });
+            if (!fits) {
+              const txt = slots.map(sl => `${sl.from}-${sl.to}`).join('/');
+              errs.push(`${e.name}: 提出時間(${txt})外の${st.name} (${date})`);
+            }
+          }
         }
       } else {
         errs.push(`${e.name}: 希望が未入力の日に割当 (${date})`);
@@ -100,13 +110,13 @@ function audit(data, assignments) {
       mates.forEach(m => {
         if ((e.ngPartners || []).indexOf(m) >= 0) errs.push(`${e.name}: 相性NGの相手と同勤務 (${date})`);
       });
-      // 新人ペア
+      // 新人だけの勤務にしない（教育担当という属性は持たせず、新人でない人がいればよい）
       if (e.newbie) {
-        const hasTrainer = mates.some(m => {
+        const hasSenior = mates.some(m => {
           const o = data.employees.find(x => x.id === m);
-          return o && !o.newbie && (o.trainer || o.leader);
+          return o && !o.newbie;
         });
-        if (!hasTrainer) errs.push(`${e.name}(新人): 教育担当なしの勤務 (${date})`);
+        if (!hasSenior) errs.push(`${e.name}(新人): 新人だけの勤務 (${date})`);
       }
       // 週40時間
       const wk = Rules.weekKey(data, date);
@@ -420,7 +430,7 @@ T('シナリオ6d：定休日・臨時休業日には誰も入れない');
 /* =======================================================================
    シナリオ7：新人の教育ペア
    ======================================================================= */
-T('シナリオ7：新人は必ず教育担当と同じ勤務になる');
+T('シナリオ7：新人は必ず新人以外と同じ勤務になる');
 {
   const d = baseData();
   d.employees.forEach(e => { if (e.id === 'e7') { e.newbie = true; e.minDays = 10; } });
@@ -428,7 +438,7 @@ T('シナリオ7：新人は必ず教育担当と同じ勤務になる');
   const errs = audit(data, res.assignments);
   const newbieDays = res.stats.e7.days;
   console.log(`  新人 山本: ${newbieDays}日`);
-  ok(errs.filter(x => x.indexOf('新人') >= 0).length === 0, '教育担当なしの勤務が存在しない');
+  ok(errs.filter(x => x.indexOf('新人') >= 0).length === 0, '新人だけの勤務が存在しない');
   ok(newbieDays > 0, '新人にも勤務が入る（ペア制約で全滅しない）');
   ok(errs.length === 0, 'その他の違反もなし', errs.slice(0, 8).join('\n       → '));
 }

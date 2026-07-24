@@ -1,6 +1,6 @@
 @charset "utf-8";
 /* ===========================================================
-   シフト自動作成 — スタイル
+   KINMATE — スタイル
 
    webデザインナレッジ準拠のメモ
    ・モバイルファースト（既定＝スマホ／min-width:768px で拡張）
@@ -13,16 +13,16 @@
    =========================================================== */
 
 :root{
-  /* ベース70：温かみのある紙色 */
-  --bg:#f7f5f2;
+  /* ベース70：かなり薄い黄緑。カードは白のままにして浮かせる */
+  --bg:#f4f8ea;
   --panel:#ffffff;
-  --panel-2:#faf8f5;
+  --panel-2:#f8fbf1;
 
   /* メイン25 */
-  --line:#e8e2d9;
-  --line-2:#d5ccbf;
-  --text:#3a3733;
-  --muted:#6f675d;
+  --line:#e4ebd8;
+  --line-2:#cfd9c0;
+  --text:#36382f;
+  --muted:#666b58;
 
   /* アクセント5 */
   --accent:#5573b5;
@@ -522,3 +522,9 @@ details.rule[open] summary::before{content:'▾ '}
   font-size:13px;color:var(--muted);letter-spacing:.06em;
   padding-bottom:8px;border-bottom:1px solid var(--line-2);margin:0 0 8px;
 }
+
+/* ---------- アイコン ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.ico{flex:none}
+.btn.icon-only{padding:0 8px;gap:0}
+.chip .btn.icon-only{border:none;background:none}
